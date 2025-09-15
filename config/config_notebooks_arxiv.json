@@ -1,0 +1,89 @@
+{
+
+    "patches_info_path": "../results/compute_patches/her2_final_without_A/patches_info.pkl.gz",
+    
+    "base_color_palette": ["deepskyblue", "limegreen", "deeppink", "gold", "mediumpurple", "orangered", "lightgrey", "sienna"],
+    "base_model_palette": {
+        "uni": "deepskyblue",
+        "uni2": "limegreen",
+        "virchow": "deeppink",
+        "provgigapath": "gold",
+        "ctranspath": "mediumpurple",
+        "simclr": "orangered",
+        "handcrafted_features": "lightgrey",
+        "scMTOP": "sienna"
+    },
+    "path_to_base_pipelines": [
+        "../pipeline/uni/",
+        "../pipeline/uni2",
+        "../pipeline/virchow",
+        "../pipeline/provgigapath",
+        "../pipeline/ctranspath",
+        "../pipeline/simclr"
+    ],
+    "base_model_list": ["uni", 
+    "uni2", 
+    "virchow", 
+    "provgigapath", 
+    "ctranspath", 
+    "simclr"],
+
+    "base_benchmark_folder": "../results/benchmark/her2_final_without_A/base_models/",
+
+    "invasive_cancer_clustering_algo": "kmeans",
+
+    "figures_folder": "../Figures",
+
+    "retrained_color_palette": ["deepskyblue", 
+    "#3CA149", 
+    "#95AD7D", 
+    "#CCDC54", 
+    "#6853A2", 
+    "#AA7FB4", 
+    "#A94F9B"],
+
+    "path_to_retrained_pipelines_1": ["../pipeline/uni/",
+                    "../pipeline/HER2_uni_explora_kde_4096_prototypes",
+                    "../pipeline/HER2_uni_explora_kde_16384_prototypes", 
+                    "../pipeline/HER2_uni_explora_kde_65536_prototypes", 
+                    "../pipeline/HER2_uni_explora_koleo_4096_prototypes", 
+                    "../pipeline/HER2_uni_explora_koleo_16384_prototypes", 
+                    "../pipeline/HER2_uni_explora_koleo_65536_prototypes"],
+
+    "retrained_model_list1": ["uni",
+             "uni_explora_kde_4096_prototypes",
+             "uni_explora_kde_16384_prototypes",
+             "uni_explora_kde_65536_prototypes",
+             "uni_explora_koleo_4096_prototypes",
+             "uni_explora_koleo_16384_prototypes",
+             "uni_explora_koleo_65536_prototypes"],
+
+    "retrained_model_list1_type": "explora",
+
+    "retrained_benchmark_folder1": "../results/benchmark/her2_final_without_A/uni_explora_models/",
+
+
+    "path_to_retrained_pipelines_2": ["../pipeline/uni/",
+                    "../pipeline/HER2_uni_full_kde_4096_prototypes",
+                    "../pipeline/HER2_uni_full_kde_16384_prototypes", 
+                    "../pipeline/HER2_uni_full_kde_65536_prototypes", 
+                    "../pipeline/HER2_uni_full_koleo_4096_prototypes", 
+                    "../pipeline/HER2_uni_full_koleo_16384_prototypes", 
+                    "../pipeline/HER2_uni_full_koleo_65536_prototypes"],
+
+    
+    "retrained_model_list2": ["uni",
+             "uni_full_kde_4096_prototypes",
+             "uni_full_kde_16384_prototypes",
+             "uni_full_kde_65536_prototypes",
+             "uni_full_koleo_4096_prototypes",
+             "uni_full_koleo_16384_prototypes",
+             "uni_full_koleo_65536_prototypes"],
+
+    "retrained_model_list2_type": "full",
+
+    "retrained_benchmark_folder2": "../results/benchmark/her2_final_without_A/uni_full_models/"
+
+
+
+}

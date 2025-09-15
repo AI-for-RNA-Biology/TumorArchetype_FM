@@ -1,0 +1,7 @@
+{
+  "model_name": "uni2",
+  "retrained_model_path": "",
+  "patches_folder": "../results/compute_patches/her2_final_without_A/",
+  "pipeline_name": "uni2",
+  "results_folder": "../pipeline/"
+}

@@ -1,0 +1,18 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:{{ VERSION }}
+Stage: build
+
+%arguments
+    VERSION=24.07-py3
+
+%post
+    apt-get -y install libopenjp2-7-dev libopenjp2-tools openslide-tools
+    pip install tiatoolbox
+
+
+%labels
+    Author lisa.fournier@idiap.ch
+    Version v0.0.1
+
+%help
+    This is a test container to make tiatoolbox work.

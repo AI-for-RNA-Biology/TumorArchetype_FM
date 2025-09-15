@@ -1,0 +1,29 @@
+{
+  "path_to_pipeline": [
+    "../pipeline/uni",
+    "../pipeline/HER2_uni_full_kde_4096_prototypes",
+    "../pipeline/HER2_uni_full_kde_16384_prototypes",
+    "../pipeline/HER2_uni_full_kde_65536_prototypes",
+    "../pipeline/HER2_uni_full_koleo_4096_prototypes",
+    "../pipeline/HER2_uni_full_koleo_16384_prototypes",
+    "../pipeline/HER2_uni_full_koleo_65536_prototypes"
+  ],
+  "pipelines_list": [
+    "uni",
+    "uni_full_kde_4096_prototypes",
+    "uni_full_kde_16384_prototypes",
+    "uni_full_kde_65536_prototypes",
+    "uni_full_koleo_4096_prototypes",
+    "uni_full_koleo_16384_prototypes",
+    "uni_full_koleo_65536_prototypes"
+  ],
+  "saving_folder": "../results/benchmark/her2_final_without_A/uni_full_models",
+  "dataset": "her2_final_without_A",
+  "engineered_features_saving_folder": "../results/engineered_features/scMTOP/with_zernike",
+  "benchmark_task": "invasive_cancer_clustering",
+  "extension": "pdf",
+  "molecular_emb_path": "../results/molecular/filtered_gene_expression.h5ad",
+  "molecular_name": "raw_filtered",
+  "ref_model_emb": "../pipeline/uni/image_embedding.h5ad",
+  "clustering_algo": "kmeans"
+}

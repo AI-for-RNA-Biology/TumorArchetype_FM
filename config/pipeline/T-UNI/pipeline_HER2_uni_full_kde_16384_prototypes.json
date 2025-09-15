@@ -1,0 +1,7 @@
+{
+  "model_name": "uni",
+  "retrained_model_path": "../dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes/epoch_1.pth",
+  "patches_folder": "../results/compute_patches/her2_final_without_A/",
+  "pipeline_name": "HER2_uni_full_kde_16384_prototypes",
+  "results_folder": "../pipeline/"
+}

@@ -1,0 +1,27 @@
+
+{
+  "path_to_pipeline": [
+    "../pipeline/uni",
+    "../pipeline/uni2",
+    "../pipeline/provgigapath",
+    "../pipeline/virchow2",
+    "../pipeline/provgigapath",
+    "../pipeline/ctranspath",
+    "../pipeline/simclr"
+  ],
+  "pipelines_list": [
+    "uni",
+    "uni2",
+    "provgigapath",
+    "virchow2",
+    "provgigapath",
+    "ctranspath",
+    "simclr"
+  ],
+  "saving_folder": "../results/benchmark/her2_final_without_A/base_models",
+  "dataset": "her2_final_without_A",
+  "engineered_features_saving_folder": "../results/engineered_features/scMTOP/with_zernike",
+  "extension": "pdf",
+  "benchmark_task": "unsupervised_clustering_ARI",
+  "clustering_algo": "kmeans"
+}
