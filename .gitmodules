@@ -1,3 +1,4 @@
 [submodule "dinov2"]
 	path = dinov2
-	url = https://gitlab.idiap.ch/genomics/dinov2
+	url = git@github.com:AI-for-RNA-Biology/dinov2.git
+	branch = main
