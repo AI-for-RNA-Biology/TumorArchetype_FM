@@ -247,7 +247,7 @@ plot_pathways <- function(cluster, results) {
 
 
 save_dge_pathways_analysis_per_clusters <- function(res, directory_name, add_name = ""){
-  write.csv(res$markers, file = paste0(directory_name, "/", "marker_genes.csv"))
+  write.csv(res$markers, file = paste0(directory_name, "/", "marker_genes", add_name, ".csv"))
   
   res$gprofiler_results <- lapply(res$gprofiler_results, function(df) {
     if (length(df) > 0) {
