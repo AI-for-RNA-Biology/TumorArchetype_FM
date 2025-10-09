@@ -32,7 +32,7 @@
 
     "invasive_cancer_clustering_algo": "kmeans",
 
-    "figures_folder": "../Figures_fixedseed1",
+    "figures_folder": "../Figures/HER2/fixedseed1/",
 
     "retrained_color_palette": ["deepskyblue", 
      "#2E7D32",

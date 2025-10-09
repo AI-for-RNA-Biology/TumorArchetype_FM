@@ -30,7 +30,7 @@
 
     "invasive_cancer_clustering_algo": "kmeans",
 
-    "figures_folder": "../Figures_TNBC/",
+    "figures_folder": "../Figures/TNBC/",
 
 
     "retrained_color_palette": ["deepskyblue", 
