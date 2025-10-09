@@ -266,3 +266,52 @@ save_dge_pathways_analysis_per_clusters <- function(res, directory_name, add_nam
     write.csv(res$gprofiler_results[[name]], file = paste0(directory_name, "/", "pathways_results_cluster_", name, add_name, ".csv"), row.names = FALSE)
   })
 }
+
+load_dge_pathways_analysis_per_clusters <- function(directory_name, add_name = ""){
+  # Load marker genes
+  markers_file <- paste0(directory_name, "/", "marker_genes", add_name, ".csv")
+  if (!file.exists(markers_file)) {
+    stop("Marker genes file not found: ", markers_file)
+  }
+  markers <- read.csv(markers_file, row.names = 1)
+  
+  # Find all pathway results files
+  pathway_files <- list.files(directory_name, 
+                              pattern = paste0("^pathways_results_cluster_.*", add_name, "\\.csv$"), 
+                              full.names = TRUE)
+  
+  if (length(pathway_files) == 0) {
+    warning("No pathway results files found in: ", directory_name)
+    return(list(markers = markers, gprofiler_results = list()))
+  }
+  
+  # Initialize gprofiler_results list
+  gprofiler_results <- list()
+  
+  # Load each pathway results file
+  for (file in pathway_files) {
+    # Extract cluster name from filename
+    basename_file <- basename(file)
+    cluster_name <- gsub(paste0("^pathways_results_cluster_(.*)_?", add_name, "\\.csv$"), "\\1", basename_file)
+    cluster_name <- gsub("_$", "", cluster_name)  # Remove trailing underscore if present
+    
+    # Read the CSV file
+    pathway_data <- read.csv(file, stringsAsFactors = FALSE)
+    
+    # Convert parents column back to list format if it exists
+    if ("parents" %in% colnames(pathway_data)) {
+      pathway_data$parents <- lapply(pathway_data$parents, function(x) {
+        if (is.na(x) || x == "") {
+          return(character(0))
+        } else {
+          return(strsplit(x, ";")[[1]])
+        }
+      })
+    }
+    
+    # Store in the results list
+    gprofiler_results[[cluster_name]] <- pathway_data
+  }
+  
+  return(list(markers = markers, gprofiler_results = gprofiler_results))
+}
