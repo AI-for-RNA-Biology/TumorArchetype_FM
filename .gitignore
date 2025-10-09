@@ -31,3 +31,6 @@ Figures_batch25/*
 grid_scripts_slurm/*
 Figures_fixedseed1/*
 notebooks/10_Molecular_DGE_between_clusters_files/*
+notebooks/draft_lena/*
+scripts/set_plots_style.py
+fonts/*
