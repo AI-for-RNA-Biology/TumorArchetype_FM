@@ -1,12 +1,12 @@
 {
   "path_to_pipeline": [
-    "../pipeline/uni",
-    "../pipeline/uni2",
-    "../pipeline/provgigapath",
-    "../pipeline/virchow2",
-    "../pipeline/provgigapath",
-    "../pipeline/ctranspath",
-    "../pipeline/simclr"
+    "../results/HER2/pipeline/uni",
+    "../results/HER2/pipeline/uni2",
+    "../results/HER2/pipeline/provgigapath",
+    "../results/HER2/pipeline/virchow2",
+    "../results/HER2/pipeline/provgigapath",
+    "../results/HER2/pipeline/ctranspath",
+    "../results/HER2/pipeline/simclr"
   ],
   "pipelines_list": [
     "uni",
@@ -17,10 +17,10 @@
     "ctranspath",
     "simclr"
   ],
-  "saving_folder": "../results/benchmark/her2_final_without_A/base_models",
-  "dataset": "her2_final_without_A",
-  "engineered_features_saving_folder": "../results/engineered_features/scMTOP/with_zernike",
-  "benchmark_task": "regresssion",
+  "saving_folder": "../results/HER2/benchmark/base_models",
+  "dataset": "HER2",
+  "engineered_features_saving_folder": "../results/HER2/engineered_features/scMTOP",
+  "benchmark_task": "regression",
   "extension": "pdf",
   "regression_type": "linear",
   "n_splits": 5

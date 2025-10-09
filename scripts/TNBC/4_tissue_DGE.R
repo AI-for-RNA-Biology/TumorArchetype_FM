@@ -19,7 +19,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) == 0) {
   # Default values
-  rds_file <- "/storage/research/dbmr_luisierlab/temp/lfournier/repositories/TumorArchetype-FM/results/molecular/TNBC_processed/TNBC_filtered_seurat_object.rds"
+  rds_file <- "../../results/molecular/TNBC_processed/TNBC_filtered_seurat_object.rds"
   output_dir <- here("Figures", "tissue_DGE")
   upregulated <- TRUE
 } else if (length(args) == 1) {
@@ -61,7 +61,14 @@ if (!file.exists(rds_file)) {
   stop("RDS file does not exist: ", rds_file)
 }
 
-source("/storage/research/dbmr_luisierlab/temp/lfournier/repositories/TumorArchetype-FM/digitalhistopathology/molecular_helpers.R")
+# Find the script location and source molecular_helpers.R relative to it
+if (exists("rstudioapi") && rstudioapi::isAvailable()) {
+  script_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
+} else {
+  # For command line execution, use here package or current working directory
+  script_dir <- here::here("scripts", "TNBC")
+}
+source(file.path(dirname(dirname(script_dir)), "digitalhistopathology", "molecular_helpers.R"))
 
 create_pseudobulk <- function(obj) {
   pseudobulk <- Matrix::rowSums(obj@assays$RNA$counts)
@@ -154,4 +161,4 @@ for (cluster in names(res_dge$gprofiler_results)) {
 cat("Saved pathway plots for", length(names(res_dge$gprofiler_results)), "clusters\n")
 
 result_matrix <- get_pathway_scores_across_all_clusters(res = res_dge)
-heatmap_pathways(result_matrix = result_matrix, display_numbers = TRUE, name = paste0("_", direction), directory_name = figures_dir, name = paste0("pathway_heatmap_", direction, "_known_tissues"))
+heatmap_pathways(result_matrix = result_matrix, display_numbers = TRUE, directory_name = figures_dir, name = paste0("pathway_heatmap_", direction, "_known_tissues"))

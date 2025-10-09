@@ -13,12 +13,12 @@
         "handcrafted_features": "lightgrey"
     },
     "path_to_base_pipelines": [
-        "../pipeline/TNBC/uni/",
-        "../pipeline/TNBC/uni2",
-        "../pipeline/TNBC/virchow",
-        "../pipeline/TNBC/provgigapath",
-        "../pipeline/TNBC/ctranspath",
-        "../pipeline/TNBC/simclr"
+        "../results/TNBC/pipeline/uni/",
+        "../results/TNBC/pipeline/uni2",
+        "../results/TNBC/pipeline/virchow",
+        "../results/TNBC/pipeline/provgigapath",
+        "../results/TNBC/pipeline/ctranspath",
+        "../results/TNBC/pipeline/simclr"
     ],
     "base_model_list": ["uni", 
     "uni2", 
@@ -30,7 +30,7 @@
 
     "invasive_cancer_clustering_algo": "kmeans",
 
-    "figures_folder": "../Figures_TNBC/",
+    "figures_folder": "../Figures/TNBC/",
 
 
     "retrained_color_palette": ["deepskyblue", 
@@ -41,13 +41,13 @@
     "#AA7FB4", 
     "#A94F9B"],
 
-    "path_to_retrained_pipelines_1": ["../pipeline/TNBC/uni/",
-                    "../pipeline/TNBC/uni_explora_kde_4096_prototypes",
-                    "../pipeline/TNBC/uni_explora_kde_16384_prototypes", 
-                    "../pipeline/TNBC/uni_explora_kde_65536_prototypes", 
-                    "../pipeline/TNBC/uni_explora_koleo_4096_prototypes", 
-                    "../pipeline/TNBC/uni_explora_koleo_16384_prototypes", 
-                    "../pipeline/TNBC/uni_explora_koleo_65536_prototypes"],
+    "path_to_retrained_pipelines_1": ["../results/TNBC/pipeline/uni/",
+                    "../results/TNBC/pipeline/uni_explora_kde_4096_prototypes",
+                    "../results/TNBC/pipeline/uni_explora_kde_16384_prototypes", 
+                    "../results/TNBC/pipeline/uni_explora_kde_65536_prototypes", 
+                    "../results/TNBC/pipeline/uni_explora_koleo_4096_prototypes", 
+                    "../results/TNBC/pipeline/uni_explora_koleo_16384_prototypes", 
+                    "../results/TNBC/pipeline/uni_explora_koleo_65536_prototypes"],
 
     "retrained_model_list1": ["uni",
              "uni_explora_kde_4096_prototypes",
@@ -59,16 +59,16 @@
 
     "retrained_model_list1_type": "explora",
 
-    "retrained_benchmark_folder1": "../results/benchmark/TNBC/uni_explora_models/",
+    "retrained_benchmark_folder1": "../results/TNBC/benchmark/uni_explora_models/",
 
 
-    "path_to_retrained_pipelines_2": ["../pipeline/TNBC/uni/",
-                    "../pipeline/TNBC/uni_full_kde_4096_prototypes",
-                    "../pipeline/TNBC/uni_full_kde_16384_prototypes", 
-                    "../pipeline/TNBC/uni_full_kde_65536_prototypes", 
-                    "../pipeline/TNBC/uni_full_koleo_4096_prototypes", 
-                    "../pipeline/TNBC/uni_full_koleo_16384_prototypes", 
-                    "../pipeline/TNBC/uni_full_koleo_65536_prototypes"],
+    "path_to_retrained_pipelines_2": ["../results/TNBC/pipeline/uni/",
+                    "../results/TNBC/pipeline/uni_full_kde_4096_prototypes",
+                    "../results/TNBC/pipeline/uni_full_kde_16384_prototypes", 
+                    "../results/TNBC/pipeline/uni_full_kde_65536_prototypes", 
+                    "../results/TNBC/pipeline/uni_full_koleo_4096_prototypes", 
+                    "../results/TNBC/pipeline/uni_full_koleo_16384_prototypes", 
+                    "../results/TNBC/pipeline/uni_full_koleo_65536_prototypes"],
 
     
     "retrained_model_list2": ["uni",
@@ -81,7 +81,7 @@
 
     "retrained_model_list2_type": "full",
 
-    "retrained_benchmark_folder2": "../results/benchmark/TNBC/uni_full_models/",
+    "retrained_benchmark_folder2": "../results/TNBC/benchmark/uni_full_models/",
 
     "dataset": "TNBC"
 

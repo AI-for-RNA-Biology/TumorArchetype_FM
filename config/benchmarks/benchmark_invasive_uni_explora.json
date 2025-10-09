@@ -1,12 +1,12 @@
 {
   "path_to_pipeline": [
-    "../pipeline/uni",
-    "../pipeline/HER2_uni_explora_kde_4096_prototypes",
-    "../pipeline/HER2_uni_explora_kde_16384_prototypes",
-    "../pipeline/HER2_uni_explora_kde_65536_prototypes",
-    "../pipeline/HER2_uni_explora_koleo_4096_prototypes",
-    "../pipeline/HER2_uni_explora_koleo_16384_prototypes",
-    "../pipeline/HER2_uni_explora_koleo_65536_prototypes"
+    "../results/HER2/pipeline/uni",
+    "../results/HER2/pipeline/HER2_uni_explora_kde_4096_prototypes",
+    "../results/HER2/pipeline/HER2_uni_explora_kde_16384_prototypes",
+    "../results/HER2/pipeline/HER2_uni_explora_kde_65536_prototypes",
+    "../results/HER2/pipeline/HER2_uni_explora_koleo_4096_prototypes",
+    "../results/HER2/pipeline/HER2_uni_explora_koleo_16384_prototypes",
+    "../results/HER2/pipeline/HER2_uni_explora_koleo_65536_prototypes"
   ],
   "pipelines_list": [
     "uni",
@@ -17,13 +17,13 @@
     "uni_explora_koleo_16384_prototypes",
     "uni_explora_koleo_65536_prototypes"
   ],
-  "saving_folder": "../results/benchmark/her2_final_without_A/uni_explora_models",
-  "dataset": "her2_final_without_A",
-  "engineered_features_saving_folder": "../results/engineered_features/scMTOP/with_zernike",
+  "saving_folder": "../results/HER2/benchmark/uni_explora_models",
+  "dataset": "HER2",
+  "engineered_features_saving_folder": "../results/HER2/engineered_features/scMTOP/",
   "benchmark_task": "invasive_cancer_clustering",
   "extension": "pdf",
-  "molecular_emb_path": "../results/molecular/filtered_gene_expression.h5ad",
+  "molecular_emb_path": "../results/HER2/molecular/filtered_gene_expression.h5ad",
   "molecular_name": "raw_filtered",
-  "ref_model_emb": "../pipeline/uni/image_embedding.h5ad",
+  "ref_model_emb": "../results/HER2/pipeline/uni/image_embedding.h5ad",
   "clustering_algo": "kmeans"
 }
