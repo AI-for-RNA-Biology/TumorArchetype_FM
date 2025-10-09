@@ -72,20 +72,20 @@ class HER2Dataset(SpatialDataset):
         if patches_folder is not None:
             self.init_patches_filenames()
         self.label_filenames = sorted(
-            glob.glob("../data/HER2/meta/*.tsv")
+            glob.glob("data/HER2/meta/*.tsv")
         )
 
         # Gene embeddings
         AREA_SPOT_HER2_PIXEL2 = 8000  # from QPath
         self.spot_diameter = 2 * int(np.sqrt(AREA_SPOT_HER2_PIXEL2 / math.pi))
         self.genes_count_filenames = sorted(
-            glob.glob("../data/HER2/count-matrices/*")
+            glob.glob("data/HER2/count-matrices/*")
         )
         self.genes_spots_filenames = sorted(
-            glob.glob("../data/HER2/spot-selections/*")
+            glob.glob("data/HER2/spot-selections/*")
         )
         self.images_filenames = sorted(
-            glob.glob("../data/HER2/images/HE/*")
+            glob.glob("data/HER2/images/HE/*")
         )
         self.samples_names = [
             f.split("/")[-1].split(".")[0][0:2] for f in self.images_filenames
@@ -118,7 +118,7 @@ class HER2Dataset(SpatialDataset):
                 loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
             else:
                 loading_file = (
-                    "../results/embeddings/images_embeddings/save/{}/{}.h5ad".format(
+                    "results/HER2/embeddings/images_embeddings/save/{}/{}.h5ad".format(
                         model.name.lower(), self.saving_emb_folder
                     )
                 )
@@ -222,7 +222,7 @@ class HER2Dataset(SpatialDataset):
             loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
         else:
             loading_file = (
-                "../results/embeddings/engineered_features/save/{}.h5ad".format(
+                "results/HER2/embeddings/engineered_features/save/{}.h5ad".format(
                     self.saving_emb_folder
                 )
             )
@@ -238,7 +238,7 @@ class HER2Dataset(SpatialDataset):
                 loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
             else:
                 loading_file = (
-                    "../results/embeddings/engineered_features/save/{}.h5ad".format(
+                    "results/HER2/embeddings/engineered_features/save/{}.h5ad".format(
                         self.saving_emb_folder
                     )
                 )
@@ -416,11 +416,9 @@ class TNBCDataset(SpatialDataset):
         # Image embeddings
         if patches_folder is not None:
             self.init_patches_filenames()
-        self.label_filenames = sorted(glob.glob("../results/compute_patches/TNBC/*labels.csv"))
+        self.label_filenames = sorted(glob.glob("results/TNBC/compute_patches/all/*labels.csv"))
 
-        self.images_filenames, self.all_dataframes, self.spot_diameter = self.preprocess_tnbc_images()
-
-        #self.spot_diameter = 348
+        self.spot_diameter = 348
         
         if gene_counts_path is not None:
             self.genes_count_filenames = sorted(
@@ -428,21 +426,21 @@ class TNBCDataset(SpatialDataset):
             )
         else:
             self.genes_count_filenames = sorted(
-                glob.glob("../results/TNBC/count-matrices/*.csv")
+                glob.glob("results/TNBC/count-matrices/all/*.csv")
             )
         self.genes_spots_filenames = self.label_filenames
-        #self.images_filenames = [
-         #   os.path.join(
-          #      self.dataDir, "Images", "imagesHD", os.path.basename(name)[:-4] + ".jpg"
-           # )
-            #for name in self.genes_count_filenames
-        #]
+        self.images_filenames = [
+            os.path.join(
+                self.dataDir, "Images", "imagesHD", os.path.basename(name)[:-4] + ".jpg"
+            )
+            for name in self.genes_count_filenames
+        ]
         self.samples_names = [
             f.split("/")[-1].split(".")[0] for f in self.images_filenames
         ]
 
 
-    def preprocess_tnbc_images(self, annotated_only=True):
+    def preprocess(self, annotated_only=True):
 
         dataDir = self.dataDir
     
@@ -517,7 +515,6 @@ class TNBCDataset(SpatialDataset):
 
         # Compute spot diameter
         inter_distances = []
-        spots_df = spots_dfs[0]
 
         for i in range(2, 65):
             inter_distances.append(spots_df.groupby("x").mean().loc[i+1]['pixel_x'] - spots_df.groupby("x").mean().loc[i]['pixel_x'])
@@ -601,9 +598,12 @@ class TNBCDataset(SpatialDataset):
 
                 except Exception as e:
                     print(f"Error processing {spots}: {e}")
-            
-        return images_filenames_spot_patches, all_dataframes, spot_diameter
-
+        
+        # Save the results
+        self.spot_diameter = spot_diameter
+        self.images_filenames = images_filenames_spot_patches
+        self.all_dataframes = all_dataframes
+        
 
     def get_image_embeddings(self, model, filename="ie", emb_path=None):
         """Compute the image embedding or load it if it already exists.
@@ -632,7 +632,7 @@ class TNBCDataset(SpatialDataset):
                 loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
             else:
                 loading_file = (
-                    "../results/embeddings/images_embeddings/save/{}/{}.h5ad".format(
+                    "results/TNBC/embeddings/images_embeddings/save/{}/{}.h5ad".format(
                         model.name.lower(), self.saving_emb_folder
                     )
                 )
@@ -732,7 +732,7 @@ class TNBCDataset(SpatialDataset):
             loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
         else:
             loading_file = (
-                "../results/embeddings/engineered_features/save/{}.h5ad".format(
+                "results/TNBC/embeddings/engineered_features/save/{}.h5ad".format(
                     self.saving_emb_folder
                 )
             )
@@ -748,7 +748,7 @@ class TNBCDataset(SpatialDataset):
                 loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
             else:
                 loading_file = (
-                    "../results/embeddings/engineered_features/save/{}.h5ad".format(
+                    "results/TNBC/embeddings/engineered_features/save/{}.h5ad".format(
                         self.saving_emb_folder
                     )
                 )

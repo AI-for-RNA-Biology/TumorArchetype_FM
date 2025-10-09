@@ -6,51 +6,33 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 #
-import sys
-sys.path.append("../")
-
+import os
 import argparse
 import copy
 import glob
 import json
-import os
 import time
 import warnings
-
 import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import os
+from huggingface_hub import logout
 
+import sys
+sys.path.append(os.getcwd())
 
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
-from huggingface_hub import logout
-
-from digitalhistopathology.datasets.real_datasets import (
-    HER2Dataset,
-    TNBCDataset,
-)
-
-
-
-from digitalhistopathology.datasets.spatial_dataset import (
-    MixedImageDataset,
-    SpatialDataset,
-)
-
-from digitalhistopathology.helpers import (
-    NumpyEncoder,
-)
 
 from digitalhistopathology.clustering.clustering_utils import clustering_boxplot_per_patient
-from digitalhistopathology.models import Model
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
+from digitalhistopathology.datasets.spatial_dataset import MixedImageDataset, SpatialDataset
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
-from digitalhistopathology.models import (
-    load_model,
-)
+from digitalhistopathology.helpers import NumpyEncoder
+from digitalhistopathology.models import Model, load_model
 from digitalhistopathology.monitor import Monitor
+
 
 class Pipeline:
 
@@ -58,7 +40,7 @@ class Pipeline:
         self,
         name: str,
         model: Model,
-        results_folder="../pipeline",
+        results_folder="results",
         patches_folder=None,
         selected_invasive_cancer_file=None,
         dataset=None,
@@ -72,8 +54,8 @@ class Pipeline:
         Args:
             name (str): Name of the pipeline
             model (PretrainedModel): Pretrained model from which computes the image embedding.
-            results_folder (str, optional): Where to save the pipeline results. Defaults to "../pipeline".
-            patches_folder (str, optional): Path to patches folder. If None or path does not exists, patches are computed to "../pipeline/patches". Defaults to None.
+            results_folder (str, optional): Where to save the pipeline results. Defaults to "../results/HER2/pipeline".
+            patches_folder (str, optional): Path to patches folder. If None or path does not exists, patches are computed to "../results/HER2/pipeline/patches". Defaults to None.
             selected_invasive_cancer_file (str, optional): Csv file for selected invasive cancer. Defaults to None.
             dataset (SpatialDataset, optional): Dataset. Defaults to HER2Dataset().
             svd_components_number_shannon_entropy (int, optional): Number of svd component to take for the Shannon entropy computation. To be fixed to the lower embedding dimension of all the models you want to benchmark. Defaults to 512.
@@ -98,14 +80,11 @@ class Pipeline:
 
         self.svd_components_number_shannon_entropy = svd_components_number_shannon_entropy
 
-
         self.gene_embedding_spot_normalization = gene_embedding_spot_normalization
 
         self.image_embedding = None
         self.invasive_image_embedding = None
         self.invasive_gene_embedding = None
-
-        
 
     def __create_folder(self, name, parent_folder):
         folder = os.path.join(parent_folder, name)
@@ -120,7 +99,6 @@ class Pipeline:
             self.invasive_image_embedding.result_saving_folder = folder
         if self.invasive_gene_embedding is not None:
             self.invasive_gene_embedding.result_saving_folder = folder
-
 
     def saving_folders_and_files_init(self):
         # Ensure the parent directory exists
@@ -149,13 +127,11 @@ class Pipeline:
         # TODO: Transformed the print into logs (logging) in pipeline.py ? For now, copying the sbatch logs to the model folder
         self.logs_folder = self.__create_folder(name="logs", parent_folder=self.model_results_folder)
 
-
         self.image_embedding_saving_path = os.path.join(self.model_results_folder, "image_embedding.h5ad")
 
         self.shannon_entropy_result_parent_folder = self.__create_folder(
             name="shannon_entropy", parent_folder=self.model_results_folder
         )
-
 
         self.shannon_entropy_results_folder = self.__create_folder(
             name=self.dataset.name, parent_folder=self.shannon_entropy_result_parent_folder
@@ -190,6 +166,7 @@ class Pipeline:
         self.pipeline_settings_path = os.path.join(self.model_results_folder, "pipeline_settings.json")
 
     def run(self):
+
         print("START running pipeline\n")
 
         self.load_and_save_whole_images_embeddings()
@@ -203,9 +180,6 @@ class Pipeline:
         logout()
 
         print("\nEND pipeline")
-
-
-
 
     def load_and_save_whole_images_embeddings(self, monitor_delay=None, benchmarking=False):
         """Load and and save whole image emebedding as image_embedding.h5ad. Save cpu.json, ram.json and gpu.json to compute_image_embedding_monitoring folder.
@@ -277,10 +251,10 @@ class Pipeline:
                 
             if self.dataset.name == "TNBC":
                 self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('_')[0])
-        
 
             self.image_embedding.save_embeddings(saving_path=select_image_embedding_saving_path())
             print("Saving to {} ok".format(select_image_embedding_saving_path()))
+        
         else:
             print("\nLoad image embedding from: {}".format(select_image_embedding_saving_path()))
             self.image_embedding = select_dataset().get_image_embeddings(
@@ -354,7 +328,6 @@ class Pipeline:
                 self.image_embedding.emb.uns["shannon_entropy_results"] = json.load(f)
         else:
             print("Shannon entropy results already stored in the image embedding object.")
-
 
     def enrichement_score_from_knn(self):
         """Compute enrichement scores by compting the fraction of already labeled data that was relabeled in the same label for all label and save results
@@ -445,8 +418,6 @@ class Pipeline:
         else:
             print("MLP classification results already stored.")
 
-
-
     def load_and_save_rnaseq_data(self):
         """Load and save RNAseq data: gene_embedding.h5ad, invasive_gene_embedding.h5ad. It aligns RNAseq data with their associated patches by assigning the predicted cluster from kmeans to the RNAseq data.
         Then, invasive_gene_embedding is computed by keeping only the RNAseq data related to invasive cancer knn label.
@@ -525,46 +496,46 @@ class Pipeline:
 def main():
     parser = argparse.ArgumentParser(description="Pipeline")
     parser.add_argument(
-    "--model_name",
-    "-m",
-    default="vit",
-    help="Model name",
-    type=str,
-    )
+        "--model_name",
+        "-m",
+        default="uni",
+        help="Model name",
+        type=str,
+        )
     parser.add_argument(
         "--dataset",
         "-d",
         default="HER2",
-        help="dataset name",
+        help="Dataset name",
         type=str,
-    )
+        )
     parser.add_argument(
         "--retrained_model_path",
         "-rp",
         default="",
         help="Retrained model path",
         type=str,
-    )
+        )
     parser.add_argument(
         "--patches_folder",
         "-pf",
-        default="../results/compute_patches/her2_final_without_A",
+        default="results/HER2/compute_patches/all",
         help="Patches folder",
         type=str,
-    )
+        )
     parser.add_argument(
-    "--pipeline_name",
-    "-n",
-    help="Pipeline name",
-    type=str,
-    )
+        "--pipeline_name",
+        "-n",
+        help="Pipeline name",
+        type=str,
+        )
     parser.add_argument(
-    "--results_folder",
-    "-rf",
-    default="../pipeline",
-    help="Pipeline results folder",
-    type=str,
-    )
+        "--results_folder",
+        "-rf",
+        default="results",
+        help="Pipeline results folder",
+        type=str,
+        )
 
     args = parser.parse_args()
     if not args.pipeline_name:
@@ -589,11 +560,14 @@ def main():
         dataset.genes_count_filenames = dataset.genes_count_filenames[6:]
         dataset.samples_names = dataset.samples_names[6:]
         dataset.label_filenames = dataset.label_filenames[1:]
+
     if not os.path.exists(args.patches_folder):
         warnings.warn("Patches folder does not exist. Patches will be computed.")
-    results_folder = os.path.join(args.results_folder,args.pipeline_name)
+    
+    results_folder = os.path.join(args.results_folder, args.dataset, "pipeline", args.pipeline_name)
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
+    
     pipeline = Pipeline(
         name=args.pipeline_name,
         model=model,
