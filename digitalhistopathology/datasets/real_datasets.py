@@ -9,18 +9,30 @@ import glob
 import math
 import os
 import pandas as pd
-
 import numpy as np
 import seaborn as sns
+from PIL import Image
+from json import load
+from natsort import natsorted
 
+Image.MAX_IMAGE_PIXELS = None
 
-from digitalhistopathology.engineered_features.engineered_features import EngineeredFeatures
+from digitalhistopathology.embeddings.embedding import Embedding
 from digitalhistopathology.embeddings.gene_embedding import GeneEmbedding
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
-from digitalhistopathology.embeddings.embedding import Embedding
-
-
+from digitalhistopathology.engineered_features.engineered_features import EngineeredFeatures
 from digitalhistopathology.datasets.spatial_dataset import SpatialDataset
+
+
+# R imports for TNBC  
+import rpy2.robjects as ro
+import rpy2.robjects.vectors as rvec
+from rpy2.robjects import pandas2ri
+from rpy2.robjects.packages import importr
+
+pandas2ri.activate()
+EBImage = importr('EBImage')
+
 
 
 class HER2Dataset(SpatialDataset):
@@ -60,20 +72,20 @@ class HER2Dataset(SpatialDataset):
         if patches_folder is not None:
             self.init_patches_filenames()
         self.label_filenames = sorted(
-            glob.glob("../data/HER2_breast_cancer/meta/*.tsv")
+            glob.glob("../data/HER2/meta/*.tsv")
         )
 
         # Gene embeddings
         AREA_SPOT_HER2_PIXEL2 = 8000  # from QPath
         self.spot_diameter = 2 * int(np.sqrt(AREA_SPOT_HER2_PIXEL2 / math.pi))
         self.genes_count_filenames = sorted(
-            glob.glob("../data/HER2_breast_cancer/count-matrices/*")
+            glob.glob("../data/HER2/count-matrices/*")
         )
         self.genes_spots_filenames = sorted(
-            glob.glob("../data/HER2_breast_cancer/spot-selections/*")
+            glob.glob("../data/HER2/spot-selections/*")
         )
         self.images_filenames = sorted(
-            glob.glob("../data/HER2_breast_cancer/images/HE/*")
+            glob.glob("../data/HER2/images/HE/*")
         )
         self.samples_names = [
             f.split("/")[-1].split(".")[0][0:2] for f in self.images_filenames
@@ -405,7 +417,10 @@ class TNBCDataset(SpatialDataset):
         if patches_folder is not None:
             self.init_patches_filenames()
         self.label_filenames = sorted(glob.glob("../results/compute_patches/TNBC/*labels.csv"))
-        self.spot_diameter = 348
+
+        self.images_filenames, self.all_dataframes, self.spot_diameter = self.preprocess_tnbc_images()
+
+        #self.spot_diameter = 348
         
         if gene_counts_path is not None:
             self.genes_count_filenames = sorted(
@@ -416,15 +431,179 @@ class TNBCDataset(SpatialDataset):
                 glob.glob("../results/TNBC/count-matrices/*.csv")
             )
         self.genes_spots_filenames = self.label_filenames
-        self.images_filenames = [
-            os.path.join(
-                self.dataDir, "Images", "imagesHD", os.path.basename(name)[:-4] + ".jpg"
-            )
-            for name in self.genes_count_filenames
-        ]
+        #self.images_filenames = [
+         #   os.path.join(
+          #      self.dataDir, "Images", "imagesHD", os.path.basename(name)[:-4] + ".jpg"
+           # )
+            #for name in self.genes_count_filenames
+        #]
         self.samples_names = [
             f.split("/")[-1].split(".")[0] for f in self.images_filenames
         ]
+
+
+    def preprocess_tnbc_images(self, annotated_only=True):
+
+        dataDir = self.dataDir
+    
+        # Set the image names
+        if annotated_only:
+            images_name_list = natsorted([os.path.basename(f).replace('.png', '.jpg') for f in glob.glob(f"{dataDir}/Images/imageAnnotations/*.png")])
+            images_filenames_spot_patches = [f"{dataDir}/Images/imagesHD/{image}" for image in images_name_list]
+        else:
+            images_filenames_spot_patches = natsorted(glob.glob(f"{dataDir}/Images/imagesHD/*.jpg"))
+            images_name_list = [os.path.basename(f) for f in images_filenames_spot_patches]
+
+        def convert_to_df(data):
+            # Check if data is an R Matrix
+            if isinstance(data, rvec.Matrix):
+                return pandas2ri.rpy2py(ro.r['as.data.frame'](data))
+            elif isinstance(data, rvec.Vector):
+                return pandas2ri.rpy2py(data)
+            # Check if data is an R DataFrame
+            elif isinstance(data, rvec.DataFrame):
+                return pandas2ri.rpy2py(data)
+
+            # Check if data is an EBImage object (matrix or image)
+            elif isinstance(data, ro.rinterface.Sexp):
+                # Check if it's an EBImage object (usually matrix)
+                try:
+                    ro.r('library(EBImage)')
+                    image_array = ro.r['imageData'](data)  # Convert EBImage object to matrix
+                    if isinstance(image_array, rvec.Matrix):
+                        # Convert the image matrix to a DataFrame (pixel values)
+                        return pd.DataFrame(pandas2ri.rpy2py(image_array))
+                except Exception as e:
+                    print(f"Error converting EBImage object: {e}")
+                    return None
+
+            # Return None for unsupported data types
+            else:
+                return None
+
+        # Set the spots paths
+        spots_path = [f"{dataDir}/byArray/{image.split('_')[1]}/{image.split('_')[2][:2]}/allSpots.RDS" for image in images_name_list]
+        
+        # Initialize an empty list to store DataFrames
+        spots_dfs = []
+
+        # Process each RDS file
+        idxs_to_remove = []
+        for i, spots in enumerate(spots_path):
+
+            if not os.path.exists(spots):
+                print(f"File not found: {spots}")
+                idxs_to_remove.append(i)
+                continue
+
+            try:
+                # Read the RDS file
+                spots_df = ro.r['readRDS'](spots)
+                spots_df = convert_to_df(spots_df)
+                # Add a column to track the source file
+                spots_df['pixel_x'] = spots_df['pixel_x'] * 10.0 / 3.0 # This is to get the coordinates in the HD image (31*744*31744 px). Reminder: the large image is 9523*9523px.
+                spots_df['pixel_y'] = spots_df['pixel_y'] * 10.0 / 3.0 # This is to get the coordinates in the HD image (31*744*31744 px). Reminder: the large image is 9523*9523px.
+                # Append to the list of DataFrames
+                spots_dfs.append(spots_df)
+            
+            except Exception as e:
+                print(f"Error processing {spots}: {e}")
+        
+        # Remove the missing RDS files 
+        for idx in sorted(idxs_to_remove, reverse=True):
+            del spots_path[idx]
+            del images_filenames_spot_patches[idx]
+            del images_name_list[idx]
+
+        # Compute spot diameter
+        inter_distances = []
+        spots_df = spots_dfs[0]
+
+        for i in range(2, 65):
+            inter_distances.append(spots_df.groupby("x").mean().loc[i+1]['pixel_x'] - spots_df.groupby("x").mean().loc[i]['pixel_x'])
+            
+        for i in range(2, 62):
+            inter_distances.append(spots_df.groupby("y").mean().loc[i+1]['pixel_y'] - spots_df.groupby("y").mean().loc[i]['pixel_y'])
+            
+        center_to_center_distance = np.mean(inter_distances)
+
+        # Center to center distance: 150um (according to the paper)
+        resolution = 150/center_to_center_distance
+        print(f"Resolution: {resolution:.2f}um/px")
+
+        # Spot diameter: 100um (according to the paper)
+        spot_diameter = round(100/resolution)
+        print(f"Spot diameter: {spot_diameter} px")
+        
+        # Generate all RDS file paths
+        all_dataframes = []
+        annotsBySpot = natsorted(glob.glob(f"{dataDir}/Robjects/annotsBySpot/TNBC*.RDS"))
+
+        if not annotated_only:
+            annotated_names = natsorted([os.path.basename(f).replace('.png', '') for f in glob.glob(f"{dataDir}/Images/imageAnnotations/TNBC*.png")])
+
+            # Process each RDS file
+            for idx, img_name in enumerate(images_name_list):
+                spots_df = spots_dfs[idx]
+                
+                if img_name.replace('.jpg', '') not in annotated_names:
+                    spots_df['source_file'] = img_name.replace('.jpg', '')
+                    all_dataframes.append(spots_df)
+                else:
+                    annots = f"{dataDir}/Robjects/annotsBySpot/{img_name.replace('.jpg', '').split('_')[0]}.RDS"
+
+                    try:
+                        # Read the RDS file
+                        loaded_data = ro.r['readRDS'](annots)
+
+                        # Extract 'annots'
+                        names = loaded_data.names
+                        for i, name in enumerate(names):
+                            if name == 'annots':
+                                annots_rds = loaded_data[i]
+                        annots_df = convert_to_df(annots_rds)
+                        # annots_df[
+                        #     'source_file'] = os.path.basename(annots).replace('.RDS', '')
+                        
+                        merged_dfs = pd.merge(annots_df, spots_df, left_index=True, right_index=True, suffixes=('_spot', '_annot'), how='outer')
+                        merged_dfs['source_file'] = img_name.replace('.jpg', '')
+
+                        # Add a column to track the source file
+                        
+                        # Append to the list of DataFrames
+                        all_dataframes.append(merged_dfs)
+
+                    except Exception as e:
+                        print(f"Error processing {spots}: {e}")# Combine all DataFrames into one giant DataFrame
+            
+        else:
+            
+            # Process each RDS file
+            for spots_df, annots in zip(spots_dfs, annotsBySpot):
+
+                try:
+                    # Read the RDS file
+                    loaded_data = ro.r['readRDS'](annots)
+
+                    # Extract 'annots'
+                    names = loaded_data.names
+                    for i, name in enumerate(names):
+                        if name == 'annots':
+                            annots_rds = loaded_data[i]
+                    annots_df = convert_to_df(annots_rds)
+
+                    spots_df = spots_df[spots_df['selected'] == 1]  # Filter spots to only include selected ones
+                    merged_dfs = pd.merge(annots_df, spots_df, left_index=True, right_index=True, suffixes=('_spot', '_annot'), how='outer')
+                    merged_dfs['source_file'] = os.path.basename(annots).replace('.RDS', '')
+                    
+                    # Append to the list of DataFrames
+                    all_dataframes.append(merged_dfs)
+
+                except Exception as e:
+                    print(f"Error processing {spots}: {e}")
+            
+        return images_filenames_spot_patches, all_dataframes, spot_diameter
+
 
     def get_image_embeddings(self, model, filename="ie", emb_path=None):
         """Compute the image embedding or load it if it already exists.
@@ -590,6 +769,8 @@ class TNBCDataset(SpatialDataset):
         except Exception as e:
             print("Cannot load engineered features: {}".format(e))
         return ef
+
+
 
     def get_palette_2():
         palette = sns.color_palette(palette="bright")

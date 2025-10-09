@@ -633,7 +633,7 @@ class PatchGenerator:
                 self.spots_filenames
             ), "images_filenames_spot_patches and spots_filenames does not have the same size"
             for img_file, spots_file in zip(sorted(self.images_filenames_spot_patches), sorted(self.spots_filenames)):
-                spots_df = pd.read_csv(spots_file, sep="\t", compression="gzip")
+                spots_df = pd.read_csv(spots_file, sep="\t") #, compression="gzip")
                 self.spots_patches(img_file, spots_df, hdf5_file=hdf5_file)
                 
         elif (
