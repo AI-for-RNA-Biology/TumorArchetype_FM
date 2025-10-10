@@ -43,7 +43,7 @@ def main():
 
     args = parser.parse_args()
 
-    patch_generator = PatchGenerator()
+    patch_generator = PatchGenerator(saving_folder="")
     patch_generator.create_subset_hdf5(
         original_hdf5_path=args.original_hdf5,
         csv_path=args.csv_path,

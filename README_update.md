@@ -132,12 +132,12 @@ In more details here are the steps:
 
 Example usage to extract embeddings from UNI using HER2 dataset
 ```
-python scripts/pipeline.py --model_name uni --patches_folder ../results/HER2/compute_patches/ --pipeline_name uni --results_folder ../results/ --dataset HER2
+python scripts/pipeline.py --model_name uni --patches_folder results/HER2/compute_patches/ --pipeline_name uni --results_folder results/ --dataset HER2
 ```
 
 Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `script/compute_embeddings.py` that takes the same arguments. 
 
-This step requires a GPU. It was run on a rtx3090 GPU, 4 CPUs and 64GB of RAM. You can also compute without GPU as it is useful only for inference. It lasts around 20 minutes.
+This step requires a GPU. It was run on a rtx3090 GPU, 12 CPUs and 128G of RAM. You can also compute without GPU as it is useful only for inference. It lasts around 20 minutes.
 
 The config files for this step and all models are available under `config/pipeline/base_models`. You can refer to them to know the parameters you need to pass to the function.
 
@@ -154,9 +154,9 @@ In the context of our study, we were interested in the invasive cancer patches, 
 
 ```python
 python scripts/create_subset_hdf5.py \
-    --original_hdf5 ../results/HER2/compute_patches/all/patches.hdf5 \
-    --csv_path ../results/HER2/pipeline/uni/select_invasive_cancer/selected_invasive_cancer.csv \
-    --new_hdf5 ../results/HER2/compute_patches/invasive/patches.hdf5
+    --original_hdf5 results/HER2/compute_patches/all/patches.hdf5 \
+    --csv_path results/HER2/pipeline/uni/select_invasive_cancer/selected_invasive_cancer.csv \
+    --new_hdf5 results/HER2/compute_patches/invasive/patches.hdf5
 ``` 
 
 This step is really fast and can be run on a single CPU with 16GB of memory. 
@@ -165,10 +165,10 @@ This step is really fast and can be run on a single CPU with 16GB of memory.
 
 **5.4.1. Perform extended-pretraining**:
 
-In this step, we performed extended pre-training of UNI, using the invasive cancer patches selected above. The final models are called T-UNI models. Different T-UNI models have been generated, varying the extended pretraining strategy (full or ExPLoRa), the loss (KDE or KoLeo), and finally, the number of prototypes. All used config files are available in `dinov2/configs`. The script to perform extended pre-training is `dinov2/dinov2/train/train.py` and can be used as follows:
+In this step, we performed extended pre-training of UNI, using the invasive cancer patches selected above. The final models are called T-UNI models. Different T-UNI models have been generated, varying the extended pretraining strategy (full or ExPLoRa), the loss (KDE or KoLeo), and finally, the number of prototypes. All used config files are available in `config`. The script to perform extended pre-training is `dinov2/dinov2/train/train.py` and can be used as follows:
 
 ```bash
-PYTHONPATH=$(pwd) python dinov2/train/train.py path_to_your_config_file
+PYTHONPATH=$(pwd) python dinov2/dinov2/train/train.py config/extended_pretraining/{dataset}/{config_file}.yaml
 ```
 
 For more information about the extended pretraining, please see the [dinov2 README](./dinov2/README.md). Note that you will need another environment to run it. The [model card](./dinov2/MODEL_CARD_T_UNI.md) is available for the T-UNI models. You can also download direclty the model weights on [Zenodo](https://zenodo.org/records/15053890) and place them in the folder `dinov2/extended_pretrained_models`. For the rest of the code to run, please put each model in a directory named with the model name and adding `HER2_` at the beginning. Then rename the weights file as `epoch_1.pth`.

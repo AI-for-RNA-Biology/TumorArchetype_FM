@@ -50,14 +50,14 @@ class PatchGenerator:
         overlap_pixels=0,
         extension="tiff",
         filter_background=True,
-        saving_folder="../results/patches_test/",
+        saving_folder="results/patches_test/",
         name_patches_info_file="patches_info.pkl.gz",
         images_filenames_spot_patches=None,
         spots_filenames=None,
         spot_mask=True,
         spot_diameter=None,
         filter_with_neighbours=True,
-        log_file="../logs/compute_patches.log",
+        log_file="logs/compute_patches.log",
         spots_df=None,
     ):
         """
@@ -69,14 +69,14 @@ class PatchGenerator:
             overlap_pixels (int, optional): Number of overlapping pixels you allow for the patches computation. Better to give an even number because the pixels are shared between columns and rows. Defaults to 0.
             extension (str, optional): Extension of your patches files. Defaults to "tiff".
             filter_background (bool, optional): If you want to have only foreground patches. Defaults to True.
-            saving_folder (str, optional): Where to save the patches and the information file. Defaults to "../results/patches_test/".
+            saving_folder (str, optional): Where to save the patches and the information file. Defaults to "results/patches_test/".
             name_patches_info_file (str, optional): Name of the information file. Need to end with .pkl.gz. Defaults to "patches_info.pkl.gz".
             images_filenames_spot_patches (list, optional): List of image files from which spot patches are computed. Defaults to None.
             spots_filenames (list, optional): List of spots location filename corresponding to the images_filenames_spot_patches. Defaults to None.
             spot_mask (bool, optional): Whether or not using the circular mask for the spot patches. Defaults to True.
             spot_diameter (float, optional): Diameter of the spot size on the image in pixels. Defaults to None.
             filter_with_neighbours (bool, optional): Whether to post-filter patches with neighbours threshold. Defaults to True.
-            log_file (str, optional): Logging file. Defaults to "../logs/compute_patches.log".
+            log_file (str, optional): Logging file. Defaults to "logs/compute_patches.log".
             spots
         """
 
@@ -112,7 +112,7 @@ class PatchGenerator:
         self.filter_with_neighbours = filter_with_neighbours
         self.all_patches_info = []
 
-        if not os.path.exists(self.saving_folder):
+        if not os.path.exists(self.saving_folder) and self.saving_folder != "":
             print("Creating saving folder: {}".format(self.saving_folder), flush=True)
             os.makedirs(self.saving_folder, exist_ok=True)
 
@@ -660,10 +660,10 @@ class PatchGenerator:
     @staticmethod
     def get_random_balanced_benchmark_files():
         """Get random WSI with a balanced number from the human melanoma, HER2-positive breast cancer and TCGA dataset to create the benchmark dataset."""
-        hm = sorted(glob.glob("../data/human_melanoma/raw_images/*.jpg"))
-        tcga = sorted(glob.glob("../data/tcga/*/*.svs"))
+        hm = sorted(glob.glob("data/human_melanoma/raw_images/*.jpg"))
+        tcga = sorted(glob.glob("data/tcga/*/*.svs"))
         # filtering patient A
-        her2 = sorted(glob.glob("../data/HER2_breast_cancer/images/HE/*.jpg"))[6:]
+        her2 = sorted(glob.glob("data/HER2/images/HE/*.jpg"))[6:]
         files_number = int(min([len(hm), len(tcga), len(her2)]))
         benchmark_list = random.sample(hm, files_number)
         benchmark_list.extend(random.sample(tcga, files_number))
@@ -868,9 +868,9 @@ class PatchGenerator:
             if "path_origin" in group.columns:
                 path_origin = group["path_origin"].iloc[0]
             else:
-                path_origin = glob.glob("../data/HER2_breast_cancer/images/HE/{}.jpg".format(group["name_origin"].iloc[0]))
-                path_origin.extend(glob.glob("../data/human_melanoma/raw_images/{}.jpg".format(group["name_origin"].iloc[0])))
-                path_origin.extend(glob.glob("../data/tcga/*/{}*.svs".format(group["name_origin"].iloc[0])))
+                path_origin = glob.glob("data/HER2/images/HE/{}.jpg".format(group["name_origin"].iloc[0]))
+                path_origin.extend(glob.glob("data/human_melanoma/raw_images/{}.jpg".format(group["name_origin"].iloc[0])))
+                path_origin.extend(glob.glob("data/tcga/*/{}*.svs".format(group["name_origin"].iloc[0])))
                 assert len(path_origin) == 1
                 path_origin = path_origin[0]
 
