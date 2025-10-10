@@ -401,7 +401,10 @@ class TNBCDataset(SpatialDataset):
         "undetermined",
     ]
 
-    def __init__(self, patches_folder=None, saving_emb_folder=None, dataDir=None,
+    def __init__(self, 
+                 patches_folder=None, 
+                 saving_emb_folder=None, 
+                 dataDir=None,
                  gene_counts_path=None):
         """
         Args:
@@ -652,6 +655,7 @@ class TNBCDataset(SpatialDataset):
         spot_normalization=False,
         load=False,
         filename="ge",
+        molecular_emb_path=None,
     ):
         """Compute the gene embedding or load it if it already exists.
 
@@ -661,6 +665,7 @@ class TNBCDataset(SpatialDataset):
             spot_normalization (bool, optional): If spots normalization is done if preprocessing. Defaults to False.
             load (bool, optional): If we need to load gene embedding from file. Defaults to False.
             filename (str, optional): Filename of the .h5ad gene embedding. Defaults to "ge".
+            molecular_emb_path (str, optional): Path to pre-processed parquet file. Defaults to None.
 
         Returns:
             gene_embedding.GeneEmebdding: gene embedding
@@ -672,15 +677,22 @@ class TNBCDataset(SpatialDataset):
             spots_filenames=self.genes_spots_filenames,
             image_filenames=self.images_filenames,
             label_files=self.label_filenames,
-            patches_filenames=self.patches_filenames,
+            patches_filenames=getattr(self, 'patches_filenames', None),
             name=self.name,
             st_method="old_st",
         )
-        if compute_emb:
+        
+        if molecular_emb_path is not None:
+            # Load from pre-processed parquet file (raw, normalized, or combat-corrected)
+            print(f"Loading gene embeddings from parquet: {molecular_emb_path}")
+            self._load_from_parquet(ge, molecular_emb_path)
+            
+        elif compute_emb:
             ge.compute_embeddings()
             if preprocessing:
                 ge.emb = ge.preprocessing(spot_norm=spot_normalization)
             print(ge.emb)
+            
         elif load:
             try:
                 loading_file = os.path.join(
@@ -770,7 +782,61 @@ class TNBCDataset(SpatialDataset):
             print("Cannot load engineered features: {}".format(e))
         return ef
 
+    def _load_from_parquet(self, ge, molecular_emb_path):
+        """Load gene embeddings from processed parquet file"""
+        import anndata
+        
+        try:
+            # Load parquet file
+            molecular_emb_df = pd.read_parquet(molecular_emb_path)
+            print(f"Loaded parquet with shape: {molecular_emb_df.shape}")
+            
+            # Handle different parquet formats
+            if 'spot_id' in molecular_emb_df.columns:
+                # spot_id is a column - set as index
+                molecular_emb_df.set_index('spot_id', inplace=True)
+                print("Using 'spot_id' column as index")
+            elif molecular_emb_df.columns[0] not in molecular_emb_df.index.names:
+                # First column might be spot names - set as index
+                molecular_emb_df.set_index(molecular_emb_df.columns[0], inplace=True)
+                print(f"Using first column as index")
 
+            # Change index to match same convention than before
+            if "parquet" in molecular_emb_df.index[0]:
+                molecular_emb_df.index = [idx.split('.parquet.')[1].replace('_X', '_spot') for idx in molecular_emb_df.index]
+                print("Modified index to match our convention")
+            
+            # Create AnnData object (spots x genes)
+            molecular_emb = anndata.AnnData(
+                X=molecular_emb_df.values, 
+                obs=pd.DataFrame(index=molecular_emb_df.index), 
+                var=pd.DataFrame(index=molecular_emb_df.columns)
+            )
+            
+            # Add sample information to obs
+            # molecular_emb.obs['sample'] = [idx.split('_')[0] for idx in molecular_emb.obs.index]
+            molecular_emb.obs['patient'] = [idx.split('_')[0] for idx in molecular_emb.obs.index]
+            molecular_emb.obs['tumor'] = [idx.split('_')[0] for idx in molecular_emb.obs.index]
+            molecular_emb.obs['name_origin'] = [idx.split('_spot')[0] for idx in molecular_emb.obs.index]
+
+            # Set the embedding in GeneEmbedding object
+            ge.emb = molecular_emb
+            
+            print(f"Created AnnData object with shape: {ge.emb.shape}")
+            print(f"Sample spots: {list(ge.emb.obs.index[:3])}")
+            print(f"Sample genes: {list(ge.emb.var.index[:5])}")
+            
+            # Add labels if label files are available
+            if hasattr(self, 'label_filenames') and self.label_filenames:
+                try:
+                    ge.add_label(dataset=self.name)
+                    print("Added tissue labels to gene embedding")
+                except Exception as e:
+                    print(f"Could not add labels: {e}")
+                    
+        except Exception as e:
+            print(f"Error loading from parquet: {e}")
+            raise
 
     def get_palette_2():
         palette = sns.color_palette(palette="bright")

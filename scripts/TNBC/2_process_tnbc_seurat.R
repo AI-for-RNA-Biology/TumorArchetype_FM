@@ -1124,6 +1124,14 @@ if (file.exists(spots_filter_file)) {
   seurat_object$label <- "undetermined"
 }
 
+# Add patient IDs to metadata (extracted from spot names)
+seurat_object$patient <- sapply(colnames(seurat_object), function(x) {
+  # Remove everything up to the last "parquet." 
+  after_parquet <- sub(".*parquet\\.", "", x)
+  # Split by "_" and take the first part (TNBC1)
+  strsplit(after_parquet, "_")[[1]][1]
+})
+
 # Save Seurat object
 seurat_file <- file.path(output_dir, "TNBC_filtered_seurat_object.rds")
 saveRDS(seurat_object, file = seurat_file)

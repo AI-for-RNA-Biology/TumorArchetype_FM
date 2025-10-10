@@ -575,8 +575,6 @@ class GeneEmbedding(Embedding):
         
         from gtfparse import read_gtf
 
-        # gencode = read_gtf("/idiap/group/genomics/annotation/hg38/GENCODE/gencode.v44.chr_patch_hapl_scaff.annotation.gtf")
-
         os.makedirs(temp_dir, exist_ok=True)
         genes_present_df = None
         chunk_embs = []
@@ -828,6 +826,88 @@ class GeneEmbedding(Embedding):
 
         return reliably_expressed_genes
 
+    def compute_umap(self, palette=None, figures_folder=None):
+        self.emb.layers['counts'] = self.emb.X.copy()
+
+        # Perform dimensionality reduction
+        sc.pp.highly_variable_genes(self.emb, n_top_genes=19000)
+        sc.tl.pca(self.emb, use_highly_variable=True)
+        sc.pp.neighbors(self.emb, n_pcs=10)
+        sc.tl.umap(self.emb)
+
+        self.emb.obsm['umap'] = self.emb.obsm['X_umap']
+
+        # Plot UMAPs
+        if "tumor" in self.emb.obs.columns and "label" in self.emb.obs.columns:
+            plt.figure(figsize=(20, 5))
+            plt.subplot(1, 3, 1)
+            sns.scatterplot(x=self.emb.obsm['X_umap'][:, 0], 
+                            y=self.emb.obsm['X_umap'][:, 1], 
+                            hue=self.emb.obs['tumor'], 
+                            palette='Accent',
+                            s=5,
+                            alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tumor (all spots)", weight='bold')
+
+            plt.subplot(1, 3, 2)
+            sub_emb = self.emb[~self.emb.obs['label'].isna()]
+            sns.scatterplot(x=sub_emb.obsm['X_umap'][:, 0],
+                            y=sub_emb.obsm['X_umap'][:, 1],
+                            hue=sub_emb.obs['tumor'],
+                            palette="Accent",
+                            s=10,
+                            alpha=0.7)
+            plt.title("Labeled by tumor (labeled spots)", weight='bold')
+
+            plt.subplot(1, 3, 3)
+            sns.scatterplot(x=self.emb.obsm['X_umap'][:, 0], 
+                            y=self.emb.obsm['X_umap'][:, 1], 
+                            hue=self.emb.obs['label'], 
+                            palette=palette,
+                            s=10,
+                            alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tissue type", weight='bold')
+            plt.suptitle("UMAP", weight='bold')
+            plt.tight_layout()
+            if figures_folder is not None:
+                plt.savefig(os.path.join(figures_folder, f"umap_gene_emb_{self.name}.pdf"), bbox_inches='tight')
+
+            # Plot KDE UMAPs
+            plt.figure(figsize=(20, 5))
+            plt.subplot(1, 3, 1)
+            sns.kdeplot(x=self.emb.obsm['X_umap'][:, 0], 
+                        y=self.emb.obsm['X_umap'][:, 1], 
+                        hue=self.emb.obs['tumor'], 
+                        palette='Accent',
+                        alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tumor (all spots)", weight='bold')
+
+            plt.subplot(1, 3, 2)
+            sns.kdeplot(x=sub_emb.obsm['X_umap'][:, 0],
+                        y=sub_emb.obsm['X_umap'][:, 1],
+                        hue=sub_emb.obs['tumor'],
+                        palette="Accent",
+                        alpha=0.7)
+            plt.title("Labeled by tumor (labeled spots)", weight='bold')
+
+            plt.subplot(1, 3, 3)
+            sns.kdeplot(x=self.emb.obsm['X_umap'][:, 0], 
+                        y=self.emb.obsm['X_umap'][:, 1], 
+                        hue=self.emb.obs['label'], 
+                        palette=palette,
+                        alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tissue type", weight='bold')
+            plt.suptitle("UMAP", weight='bold')
+            plt.tight_layout()
+            plt.savefig(os.path.join(figures_folder, f"umap_kde_gene_expression_{self.name}.pdf"), bbox_inches='tight')
 
     @staticmethod
     def get_z_score_one_pathway(df_spots, GO_genes, df_background=None, mahalanobis=False):
@@ -938,3 +1018,4 @@ class GeneEmbedding(Embedding):
         log10_pvalues = pd.DataFrame.from_dict(pvalues, orient='index')
 
         return log10_pvalues
+

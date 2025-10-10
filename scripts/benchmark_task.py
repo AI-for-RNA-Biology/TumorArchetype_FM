@@ -12,9 +12,12 @@ import seaborn as sns
 import json
 import numpy as np
 import os
-sys.path.append("../")
-
 import glob
+
+# Add the project root to Python path (relative to this script's location)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)  # Go up one level from scripts/ to project root
+sys.path.append(project_root)
 
 from digitalhistopathology.benchmark.benchmark_shannon import BenchmarkShannon
 from digitalhistopathology.benchmark.benchmark_clustering import BenchmarkClustering

@@ -50,6 +50,14 @@ cat("Loading Seurat object...\n")
 seurat_object <- readRDS(input_rds)
 cat("Loaded Seurat object with", ncol(seurat_object), "cells and", nrow(seurat_object), "genes\n")
 
+# Ensure the patient columns is properly set 
+seurat_object$patient <- sapply(colnames(seurat_object), function(x) {
+  # Remove everything up to the last "parquet." 
+  after_parquet <- sub(".*parquet\\.", "", x)
+  # Split by "_" and take the first part (TNBC1)
+  strsplit(after_parquet, "_")[[1]][1]
+})
+
 # Check if batch column exists
 if (!batch_column %in% colnames(seurat_object@meta.data)) {
   stop("Batch column '", batch_column, "' not found in metadata. Available columns: ", 
@@ -67,20 +75,54 @@ if (length(unique(batch)) < 2) {
 
 # Extract data matrix
 if (use_scale_data) {
-  if (is.null(seurat_object@assays$RNA@scale.data) || nrow(seurat_object@assays$RNA@scale.data) == 0) {
-    cat("Scaled data not available, scaling data first...\n")
-    seurat_object <- ScaleData(seurat_object, features = rownames(seurat_object))
+  # Check for Seurat v5 vs v4 compatibility
+  if (inherits(seurat_object@assays$RNA, "Assay5")) {
+    # Seurat v5 - use LayerData function (this may take several minutes for large datasets)
+    cat("Extracting scaled data from Seurat v5 object (this may take a while)...\n")
+    scaled_data <- LayerData(seurat_object, assay = "RNA", layer = "scale.data")
+    if (is.null(scaled_data) || nrow(scaled_data) == 0) {
+      cat("Scaled data not available, scaling data first...\n")
+      seurat_object <- ScaleData(seurat_object, features = rownames(seurat_object))
+      cat("Re-extracting scaled data after scaling...\n")
+      scaled_data <- LayerData(seurat_object, assay = "RNA", layer = "scale.data")
+    }
+    cat("Converting to matrix format...\n")
+    data_matrix <- as.matrix(scaled_data)
+  } else {
+    # Seurat v4 - use traditional slot access
+    if (is.null(seurat_object@assays$RNA@scale.data) || nrow(seurat_object@assays$RNA@scale.data) == 0) {
+      cat("Scaled data not available, scaling data first...\n")
+      seurat_object <- ScaleData(seurat_object, features = rownames(seurat_object))
+    }
+    data_matrix <- as.matrix(seurat_object@assays$RNA@scale.data)
   }
-  data_matrix <- as.matrix(seurat_object@assays$RNA@scale.data)
   cat("Using scaled data matrix with", nrow(data_matrix), "genes\n")
 } else {
   # Use normalized counts or raw counts
-  if (!is.null(seurat_object@assays$RNA@data) && sum(seurat_object@assays$RNA@data) > 0) {
-    data_matrix <- as.matrix(seurat_object@assays$RNA@data)
-    cat("Using normalized count data\n")
+  if (inherits(seurat_object@assays$RNA, "Assay5")) {
+    # Seurat v5 - use LayerData function (this may take several minutes for large datasets)
+    cat("Extracting normalized data from Seurat v5 object (this may take a while)...\n")
+    norm_data <- LayerData(seurat_object, assay = "RNA", layer = "data")
+    if (!is.null(norm_data) && sum(norm_data) > 0) {
+      cat("Converting normalized data to matrix format...\n")
+      data_matrix <- as.matrix(norm_data)
+      cat("Using normalized count data\n")
+    } else {
+      cat("Extracting raw count data from Seurat v5 object...\n")
+      count_data <- LayerData(seurat_object, assay = "RNA", layer = "counts")
+      cat("Converting raw count data to matrix format...\n")
+      data_matrix <- as.matrix(count_data)
+      cat("Using raw count data\n")
+    }
   } else {
-    data_matrix <- as.matrix(seurat_object@assays$RNA@counts)
-    cat("Using raw count data\n")
+    # Seurat v4 - use traditional slot access
+    if (!is.null(seurat_object@assays$RNA@data) && sum(seurat_object@assays$RNA@data) > 0) {
+      data_matrix <- as.matrix(seurat_object@assays$RNA@data)
+      cat("Using normalized count data\n")
+    } else {
+      data_matrix <- as.matrix(seurat_object@assays$RNA@counts)
+      cat("Using raw count data\n")
+    }
   }
 }
 

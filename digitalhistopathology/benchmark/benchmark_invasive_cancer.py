@@ -15,7 +15,7 @@ import seaborn as sns
 import anndata
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.embeddings.gene_embedding import GeneEmbedding
-from digitalhistopathology.datasets.real_datasets import HER2Dataset
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
 from digitalhistopathology.benchmark.benchmark_base import BenchmarkBase
 from digitalhistopathology.benchmark.benchmark_utils import get_optimal_cluster_number_one_model
 
@@ -61,10 +61,22 @@ class BenchmarkInvasive(BenchmarkBase):
         self.molecular_name = molecular_name
         self.algo = algo
 
+        if dataset == "HER2":
+            self.dataset = HER2Dataset()
+        elif dataset == "TNBC":
+            self.dataset = TNBCDataset()
+
         if molecular_emb_path is not None:
-            molecular_emb = anndata.read_h5ad(molecular_emb_path)
-            self.molecular_emb = GeneEmbedding(emb=molecular_emb)
+            if molecular_emb_path.endswith('.h5ad'):
+                molecular_emb = anndata.read_h5ad(molecular_emb_path)
+                self.molecular_emb = GeneEmbedding(emb=molecular_emb)
+            elif molecular_emb_path.endswith('.parquet'):
+                self.molecular_emb = self.dataset.get_gene_embeddings(molecular_emb_path=molecular_emb_path)
+            else:
+                print(f"Loading molecular embeddings from {molecular_emb_path} not implemented")
+
             print(f"Loaded molecular embeddings with shape {self.molecular_emb.emb.X.shape}")
+            print(f"Molecular embeddings have labels: {self.molecular_emb.emb.obs.columns.tolist()}")
 
         else:
             self.molecular_emb = None
@@ -166,7 +178,8 @@ class BenchmarkInvasive(BenchmarkBase):
         molecular_emb_labeled.emb = molecular_emb_labeled.emb[~(molecular_emb_labeled.emb.obs['predicted_label'] == 'not invasive')]
         
         if not 'umap' in molecular_emb_labeled.emb.obsm.keys():
-            raise KeyError("UMAP not computed for molecular embeddings")
+            print("Computing UMAP for the molecular embedding...", flush=True)
+            molecular_emb_labeled.compute_umap(palette=self.dataset.PALETTE)
         
         if "tumor" not in molecular_emb_labeled.emb.obs.columns:
             molecular_emb_labeled.emb.obs['tumor'] = [idx.split("_")[0] for idx in molecular_emb_labeled.emb.obs.index]
@@ -332,7 +345,7 @@ class BenchmarkInvasive(BenchmarkBase):
             print(self.invasive_image_embeddings[model].emb.X)
             
 
-            self.invasive_image_embeddings[model].palette = HER2Dataset.PALETTE    
+            self.invasive_image_embeddings[model].palette = self.dataset.PALETTE    
             self.invasive_image_embedding_raw_svd_umap(image_embedding=self.invasive_image_embeddings[model], 
                                                   saving_folder=self.saving_folder,
                                                   algo=self.algo,
@@ -363,17 +376,26 @@ class BenchmarkInvasive(BenchmarkBase):
                                               multiply_by_variance=True,
                                               algo='kmeans',
                                               min_cluster=3,
-                                              max_cluster=11,
+                                              max_cluster=10,
                                               svd_comp=5,
                                               cluster_step=1):
 
         clustering_files = sorted(glob.glob(os.path.join(saving_folder, model_name, "*.json")))
 
+        print(f"Files found in {os.path.join(saving_folder, model_name)}: {clustering_files}", flush=True)
+
+
+
         basenames = [os.path.basename(f) for f in clustering_files]
         clusters = np.arange(min_cluster, max_cluster, cluster_step)
 
-        if not f"scores_{clusters.min()}_{clusters.max()}.json" in basenames:
+        print(f"Files found in {os.path.join(saving_folder, model_name)}: {basenames}", flush=True)
+
+
+        if not f"scores_{clusters.min()}_{clusters.max()}_raw.json" in basenames:
+            
             # raw
+            print(f"scores_{clusters.min()}_{clusters.max()}_raw.json not found in {os.path.join(saving_folder, model_name)}")
             print(f"Computing {algo} clustering for raw data", flush=True)
             image_embedding.clustering_across_different_n_clusters(clusters_list=np.arange(min_cluster, max_cluster, cluster_step),
                                                         algo=algo,

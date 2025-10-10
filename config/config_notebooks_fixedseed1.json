@@ -14,12 +14,12 @@
         "scMTOP": "sienna"
     },
     "path_to_base_pipelines": [
-        "../results/HER2/pipeline/uni/",
-        "../results/HER2/pipeline/uni2",
-        "../results/HER2/pipeline/virchow",
-        "../results/HER2/pipeline/provgigapath",
-        "../results/HER2/pipeline/ctranspath",
-        "../results/HER2/pipeline/simclr"
+        "../../results/HER2/pipeline/uni/",
+        "../../results/HER2/pipeline/uni2",
+        "../../results/HER2/pipeline/virchow",
+        "../../results/HER2/pipeline/provgigapath",
+        "../../results/HER2/pipeline/ctranspath",
+        "../../results/HER2/pipeline/simclr"
     ],
     "base_model_list": ["uni", 
     "uni2", 
@@ -28,11 +28,11 @@
     "ctranspath", 
     "simclr"],
 
-    "base_benchmark_folder": "../results/HER2/benchmark/fixedseed1/base_models/",
+    "base_benchmark_folder": "../../results/HER2/benchmark/fixedseed1/base_models/",
 
     "invasive_cancer_clustering_algo": "kmeans",
 
-    "figures_folder": "../Figures/HER2/fixedseed1/",
+    "figures_folder": "../../Figures/HER2/fixedseed1/",
 
     "retrained_color_palette": ["deepskyblue", 
      "#2E7D32",
@@ -49,17 +49,17 @@
 
 
 
-    "path_to_retrained_pipelines_1": ["../results/HER2/pipeline/uni",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_4096_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_8192_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_16384_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_32768_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_65536_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_4096_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_8192_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_16384_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_32768_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_65536_prototypes"],
+    "path_to_retrained_pipelines_1": ["../../results/HER2/pipeline/uni",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_4096_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_8192_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_16384_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_32768_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_kde_65536_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_4096_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_8192_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_16384_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_32768_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_explora_koleo_65536_prototypes"],
 
     "retrained_model_list1": ["uni",
              "uni_explora_kde_4096_prototypes",
@@ -75,20 +75,20 @@
 
     "retrained_model_list1_type": "explora",
 
-    "retrained_benchmark_folder1": "../results/HER2/benchmark/fixedseed1/uni_explora_models/",
+    "retrained_benchmark_folder1": "../../results/HER2/benchmark/fixedseed1/uni_explora_models/",
 
 
-    "path_to_retrained_pipelines_2": ["../results/HER2/pipeline/fixedseed1/uni",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_4096_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_8192_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_16384_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_32768_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_65536_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_4096_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_8192_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_16384_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_32768_prototypes",
-    "../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_65536_prototypes"],
+    "path_to_retrained_pipelines_2": ["../../results/HER2/pipeline/fixedseed1/uni",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_4096_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_8192_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_16384_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_32768_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_kde_65536_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_4096_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_8192_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_16384_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_32768_prototypes",
+    "../../results/HER2/pipeline/fixedseed1/HER2_uni_full_koleo_65536_prototypes"],
 
     
     "retrained_model_list2": ["uni",
@@ -105,7 +105,7 @@
 
     "retrained_model_list2_type": "full",
 
-    "retrained_benchmark_folder2": "../results/HER2/benchmark/fixedseed1/uni_full_models/",
+    "retrained_benchmark_folder2": "../../results/HER2/benchmark/fixedseed1/uni_full_models/",
 
     "dataset": "HER2"
 
