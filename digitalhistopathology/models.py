@@ -303,7 +303,7 @@ class CTransPath(PretrainedModel):
         print("Load pretrained ctranspath model...")
         model = timm.create_model("swin_tiny_patch4_window7_224", embed_layer=ConvStem, pretrained=False)
         model.head = nn.Identity()
-        td = torch.load(self.pretrained_model_path, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        td = torch.load(self.pretrained_model_path, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=False)
         model.load_state_dict(td["model"], strict=True)
         if torch.cuda.is_available():
             model = model.cuda()
@@ -353,6 +353,7 @@ class SimCLR(Model):
             state = torch.load(
                 pretrained_model_path,
                 map_location=device,
+                weights_only=False
             )
         else:
             state = torch.load(
@@ -393,9 +394,9 @@ class UNI(Model):
         if pretrained_model_path:
             print("Load pretrained uni model...")
             if device == torch.device("cpu"):
-                model = torch.load(pretrained_model_path, map_location=device)
+                model = torch.load(pretrained_model_path, map_location=device, weights_only=False)
             else:
-                model = torch.load(pretrained_model_path)
+                model = torch.load(pretrained_model_path, weights_only=False)
         else:
             print("Load MahmoodLab/UNI model from Hugging Face Hub...")
             model = timm.create_model(
@@ -421,9 +422,9 @@ class Uni2(Model):
         if pretrained_model_path:
             print("Load pretrained uni model...")
             if device == torch.device("cpu"):
-                model = torch.load(pretrained_model_path, map_location=device)
+                model = torch.load(pretrained_model_path, map_location=device, weights_only=False)
             else:
-                model = torch.load(pretrained_model_path)
+                model = torch.load(pretrained_model_path, weights_only=False)
         else:
             print("Load MahmoodLab/UNI model from Hugging Face Hub...")
             timm_kwargs = {
@@ -459,9 +460,9 @@ class Virchow(Model):
         if pretrained_model_path:
             print("Load pretrained Virchow model...")
             if device == torch.device("cpu"):
-                model = torch.load(pretrained_model_path, map_location=device)
+                model = torch.load(pretrained_model_path, map_location=device, weights_only=False)
             else:
-                model = torch.load(pretrained_model_path)
+                model = torch.load(pretrained_model_path, weights_only=False)
         else:
             print("Load MahmoodLab/Virchow model from Hugging Face Hub...")
             # need to specify MLP layer and activation function for proper init

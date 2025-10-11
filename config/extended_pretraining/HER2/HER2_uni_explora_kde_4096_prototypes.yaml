@@ -45,14 +45,15 @@ optim:
 train:
   batch_size: 30
   split: 0.95
-  data_path: ../../results/HER2/compute_patches/filtered
-  output_dir: ../../pretrained_models/extended_uni/HER2
+  data_path: results/HER2/compute_patches/invasive
+  output_dir: pretrained_models/HER2/HER2_uni_explora_kde_4096_prototypes
   seed: 0
   num_workers: 4
   cache_dataset: true
   centering: centering
   test: false
-wandb: true
+  data_type: "hdf5"
+wandb: false
 student:
   train_strategy: explora
   arch: vit_large

@@ -135,7 +135,7 @@ Example usage to extract embeddings from UNI using HER2 dataset
 python scripts/pipeline.py --model_name uni --patches_folder results/HER2/compute_patches/ --pipeline_name uni --results_folder results/ --dataset HER2
 ```
 
-Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `script/compute_embeddings.py` that takes the same arguments. 
+Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `scripts/compute_embeddings.py` that takes the same arguments. 
 
 This step requires a GPU. It was run on a rtx3090 GPU, 12 CPUs and 128G of RAM. You can also compute without GPU as it is useful only for inference. It lasts around 20 minutes.
 
@@ -165,23 +165,23 @@ This step is really fast and can be run on a single CPU with 16GB of memory.
 
 **5.4.1. Perform extended-pretraining**:
 
-In this step, we performed extended pre-training of UNI, using the invasive cancer patches selected above. The final models are called T-UNI models. Different T-UNI models have been generated, varying the extended pretraining strategy (full or ExPLoRa), the loss (KDE or KoLeo), and finally, the number of prototypes. All used config files are available in `config`. The script to perform extended pre-training is `dinov2/dinov2/train/train.py` and can be used as follows:
+In this step, we performed extended pre-training of UNI, using the invasive cancer patches selected above. The final models are called T-UNI models. Different T-UNI models have been generated, varying the extended pretraining strategy (full or ExPLoRa), the loss (KDE or KoLeo), and finally, the number of prototypes. All used config files are available in `config/extended_pretraining`. The script to perform extended pre-training is `dinov2/dinov2/train/train.py` and can be used as follows:
 
 ```bash
-PYTHONPATH=$(pwd) python dinov2/dinov2/train/train.py config/extended_pretraining/{dataset}/{config_file}.yaml
+PYTHONPATH=$(pwd)/dinov2 python dinov2/dinov2/train/train.py config/extended_pretraining/{dataset}/{config_file}.yaml
 ```
 
-For more information about the extended pretraining, please see the [dinov2 README](./dinov2/README.md). Note that you will need another environment to run it. The [model card](./dinov2/MODEL_CARD_T_UNI.md) is available for the T-UNI models. You can also download direclty the model weights on [Zenodo](https://zenodo.org/records/15053890) and place them in the folder `dinov2/extended_pretrained_models`. For the rest of the code to run, please put each model in a directory named with the model name and adding `HER2_` at the beginning. Then rename the weights file as `epoch_1.pth`.
+For more information about the extended pretraining, please see the [dinov2 README](./dinov2/README.md). Note that you will need another environment to run it. The [model card](./dinov2/MODEL_CARD_T_UNI.md) is available for the T-UNI models. You can also download direclty the model weights on [Zenodo](https://zenodo.org/records/15053890) and place them in the folder `pretrained_models/{dataset}`. For the rest of the code to run, please put each model in a directory named with the model name and adding `{dataset}_` at the beginning. Then rename the weights file as `epoch_1.pth`.
 
 Example: 
-When you download the model `uni_full_kde_16384_prototypes.pth` on Zenodo, place it into `dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes/epoch_1.pth`.
+When you download the model `uni_full_kde_16384_prototypes.pth` on Zenodo, place it into `pretrained_models/HER2/HER2_uni_full_kde_16384_prototypes/epoch_1.pth`.
 
 **5.4.2 Run the embedding extraction on the extended pre-trained models**:
 
-Example usage to extract embeddings from a retrained version of UNI located in `dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes` under `epoch_1.pth`:
+Example usage to extract embeddings from a retrained version of UNI located in `pretrained_models/HER2/HER2_uni_full_kde_16384_prototypes` under `epoch_1.pth`:
 
 ```
-python scripts/pipeline.py --model_name uni --retrained_model_path dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes/epoch_1.pth --patches_folder results/compute_patches/her2_final_without_A/ --pipeline_name HER2_uni_full_kde_16384_prototypes --results_folder results/pipeline --embedding_name image_embedding
+python scripts/pipeline.py --model_name uni --retrained_model_path pretrained_models/HER2/HER2_uni_full_kde_16384_prototypes/epoch_1.pth --patches_folder results/HER2/compute_patches/ --pipeline_name HER2_uni_full_kde_16384_prototypes --results_folder results/HER2/pipeline 
 ```
 
 The config files to extract embeddings from all T-UNI models are available under `config/pipeline/T-UNI`.
