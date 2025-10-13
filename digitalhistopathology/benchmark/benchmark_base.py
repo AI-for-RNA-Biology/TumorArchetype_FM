@@ -65,7 +65,7 @@ class BenchmarkBase:
 
 
         self.patches_filenames = sorted(glob.glob(os.path.join(self.results_folder, "compute_patches/{}/*.tiff".format(self.dataset_name))))
-        self.patches_info_filename = os.path.join(self.results_folder, "compute_patches/{}/patches_info.pkl.gz".format(self.dataset_name))
+        self.patches_info_filename = os.path.join(self.results_folder, "{}/compute_patches/patches_info.pkl.gz".format(self.dataset_name))
         
         if dataset == "HER2":
             self.dataset = HER2Dataset()
