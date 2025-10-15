@@ -35,8 +35,9 @@ import warnings
 import torch.nn.utils as utils
 import logging
 import sys
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..","dinov2"))
-sys.path.append(project_root)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+dinov2_path = os.path.join(project_root, "dinov2")
+sys.path.append(dinov2_path)
 
 from digitalhistopathology.access_token import READ_ONLY_HF_TOKEN
 
@@ -295,7 +296,8 @@ class CTransPath(PretrainedModel):
     Get the backbone embeddings without the linear projection head."""
 
     def __init__(self):
-        super().__init__("../pretrained_models/ctranspath.pth", name="CTransPath")
+        default_path = os.path.join(project_root, "pretrained_models", "ctranspath.pth")
+        super().__init__(default_path, name="CTransPath")
         
         self.model = self.load()
 
@@ -323,7 +325,7 @@ class SimCLR(Model):
 
     def __init__(
         self,
-        pretrained_model_path="../pretrained_models/tenpercent_resnet18.ckpt",
+        pretrained_model_path=None,
         name="SimCLR",
         batch_size=512,
         num_epochs=100,
@@ -340,7 +342,7 @@ class SimCLR(Model):
     ):
         """
         Args:
-            pretrained_model_path (str, optional): Path the pretrained or retrained model weigths. Defaults to "../pretrained_models/tenpercent_resnet18.ckpt".
+            pretrained_model_path (str, optional): Path the pretrained or retrained model weigths. Defaults to None (uses default pretrained model).
             name (str, optional): Name of the model. Defaults to "SimCLR".
             training_dataset_files_list (list, optional): List with patches path to be used for the retraining. Defaults to [].
 
@@ -356,8 +358,9 @@ class SimCLR(Model):
                 weights_only=False
             )
         else:
+            default_path = os.path.join(project_root, "pretrained_models", "tenpercent_resnet18.ckpt")
             state = torch.load(
-                "../pretrained_models/tenpercent_resnet18.ckpt",
+                default_path,
                 map_location=torch.device(
                     "cuda" if torch.cuda.is_available() else "cpu"
                 ),
@@ -481,8 +484,10 @@ class Virchow(Model):
 
         super().__init__(name="Virchow", model=model)
 class ProvGigaPath(Model):
+    """Access must be granted to use this model, you must agree to the outlined terms of use: https://huggingface.co/prov-gigapath/prov-gigapath"""
 
     def __init__(self):
+        login(token=READ_ONLY_HF_TOKEN)  # logout done at the end of pipeline.run
         model = timm.create_model("hf_hub:prov-gigapath/prov-gigapath", pretrained=True)
 
         super().__init__(

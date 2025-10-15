@@ -109,6 +109,7 @@ class Pipeline:
 
         # Create the results folder
         if not os.path.exists(self.results_folder):
+            print("Saving results to:", self.results_folder)
             os.makedirs(self.results_folder)
 
         if self.patches_folder is None:

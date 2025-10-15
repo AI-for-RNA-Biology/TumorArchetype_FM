@@ -363,10 +363,12 @@ class BenchmarkClustering(BenchmarkBase):
                     plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_tumor.{self.extension}"), bbox_inches='tight')
                 
                     plt.figure(figsize=(10,10))
+                    subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
+                    subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
                     sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
                                     y=subset_emb.emb.obsm['umap'][:,1],
                                     hue=subset_emb.emb.obs['label'],
-                                    palette=palette)
+                                    palette=self.dataset.PALETTE)
                     sns.despine()
                     plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
                     plt.savefig(os.path.join(self.saving_folder, f"UMAP_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
@@ -375,7 +377,7 @@ class BenchmarkClustering(BenchmarkBase):
                     sns.kdeplot(x=subset_emb.emb.obsm['umap'][:,0],
                                     y=subset_emb.emb.obsm['umap'][:,1],
                                     hue=subset_emb.emb.obs['label'],
-                                    palette=palette)
+                                    palette=self.dataset.PALETTE)
                     sns.despine()
                     plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
                     plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
@@ -684,8 +686,6 @@ class BenchmarkClustering(BenchmarkBase):
             
 
     
-        # Stop execution here
-        # return
         plt.figure()
         plot_ari_scores_all_patients(svd5_multiplied_by_S)
         plt.savefig(os.path.join(self.saving_folder, f'ari_scores_svd5.{self.extension}'), bbox_inches='tight')
@@ -756,12 +756,30 @@ class BenchmarkClustering(BenchmarkBase):
             layer_name = 'raw'
                 
         if self.embeddings_per_slide is None:
-                self.get_embeddings_per_slide()
+            self.get_embeddings_per_slide()
+
+        # Count number of annotated slides
+        n_slides = len(self.embeddings_per_slide[self.pipelines_list[0]])
+
+        if n_slides <= 10:
+            emb_slides = self.embeddings_per_slide.copy()
+
+        else:
+            emb_slides = {}
+            for model in self.pipelines_list:
+                emb_slides[model] = {}
+                slides = list(self.embeddings_per_slide[model].keys())
+                selected_slides = list(self.embeddings_per_slide[self.pipelines_list[0]].keys())[:10]
+                for slide in selected_slides:
+                    emb_slides[model][slide] = self.embeddings_per_slide[model][slide]
+
+            print(f"Number of slides > 10, randomly selecting 10 slides: {list(emb_slides[self.pipelines_list[0]].keys())}", flush=True)
         
         for model in self.pipelines_list:
-            for slide, ie_subset_img in self.embeddings_per_slide[model].items():
+
+            for slide, ie_subset_img in emb_slides[model].items():
                 if ie_subset_img.emb.obs[(ie_subset_img.emb.obs['label'] != 'nan') & ~(ie_subset_img.emb.obs['label'].isna())].shape[0] > 0:
-                    ie_subset_img.emb.obs['path_origin'] = ie_subset_img.emb.obs['path_origin'].apply(lambda x: x.replace('ghaefliger', 'lfournier/repositories'))
+                    # ie_subset_img.emb.obs['path_origin'] = ie_subset_img.emb.obs['path_origin'].apply(lambda x: x.replace('ghaefliger', 'lfournier/repositories'))
                     ie_subset_img.emb.obs['start_width_origin'] = ie_subset_img.emb.obs['start_width_origin'].astype(int)
                     ie_subset_img.emb.obs['start_height_origin'] = ie_subset_img.emb.obs['start_height_origin'].astype(int)
 

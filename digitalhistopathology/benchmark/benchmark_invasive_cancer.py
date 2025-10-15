@@ -61,10 +61,7 @@ class BenchmarkInvasive(BenchmarkBase):
         self.molecular_name = molecular_name
         self.algo = algo
 
-        if dataset == "HER2":
-            self.dataset = HER2Dataset()
-        elif dataset == "TNBC":
-            self.dataset = TNBCDataset()
+
 
         if molecular_emb_path is not None:
             if molecular_emb_path.endswith('.h5ad'):
@@ -84,6 +81,7 @@ class BenchmarkInvasive(BenchmarkBase):
         if ref_model_emb is not None:
             self.ref_model_emb = None
         else:
+            print(f"Loading reference embedding space for quantized wasserstein distance calculation from {ref_model_emb}")
             self.ref_model_emb = anndata.read_h5ad(ref_model_emb).X
         
         self.min_cluster = min_cluster
@@ -285,7 +283,8 @@ class BenchmarkInvasive(BenchmarkBase):
         # Compute quantized wasserstein on the UMAP results
 
             
-        # if not os.path.exists(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_{n_cluster}_clusters.csv")):
+        # if not os.path.exists(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_{n_cluster}_clusters.csv")):
+        print(f"Computing quantized wasserstein distance in the image embedding space for model {model}...", flush=True)
         df_w = self.invasive_image_embeddings[model].compute_quantized_wasserstein_distance_between_clusters(cluster_col='predicted_label', 
                                                                                                                     layer=None, 
                                                                                                                     ref_space=self.ref_model_emb)

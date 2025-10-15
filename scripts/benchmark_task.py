@@ -17,7 +17,15 @@ import glob
 # Add the project root to Python path (relative to this script's location)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)  # Go up one level from scripts/ to project root
-sys.path.append(project_root)
+
+# Insert project root at front so it takes precedence over installed packages
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Also prefer the local dinov2 directory if present (repo/dinov2)
+local_dinov2_path = os.path.join(project_root, 'dinov2')
+if os.path.isdir(local_dinov2_path) and local_dinov2_path not in sys.path:
+    sys.path.insert(0, local_dinov2_path)
 
 from digitalhistopathology.benchmark.benchmark_shannon import BenchmarkShannon
 from digitalhistopathology.benchmark.benchmark_clustering import BenchmarkClustering
@@ -208,11 +216,12 @@ def main():
             args.min_comp = config.get('min_comp', 512)
             args.molecular_emb_path = config.get('molecular_emb_path', '../results/molecular/combat_corrected_embeddings.h5ad')
             args.molecular_name = config.get('molecular_name', 'gene')
+            args.dataset = config.get('dataset', 'HER2')
             args.ref_model_emb = config.get('ref_model_emb', '../pipeline/uni/image_embeddings.h5ad')
             args.min_cluster = config.get('min_cluster', 4)
             args.max_cluster = config.get('max_cluster', 10)
             args.cluster_step = config.get('cluster_step', 1)
-            args.dataset = config.get('dataset', 'HER2')
+            
             
     sns.set_palette(a)
 
