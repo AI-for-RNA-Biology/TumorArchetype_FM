@@ -8,6 +8,7 @@
 import scipy
 import numpy as np
 from sklearn.cluster import KMeans
+from digitalhistopathology.clustering.kmeans_gpu import KMeans_gpu
 import ot
 from scipy.spatial.distance import pdist, squareform, mahalanobis
 
@@ -54,10 +55,10 @@ def quantized_wasserstein(matrix, idx_samples_cluster1, idx_samples_cluster2, re
     
     k = min(k, len(matrix1), len(matrix2))
     
-    kmeans1 = KMeans(n_clusters=k)
+    kmeans1 = KMeans_gpu(n_clusters=k)
     labels1 = kmeans1.fit_predict(matrix1)   
     
-    kmeans2 = KMeans(n_clusters=k) 
+    kmeans2 = KMeans_gpu(n_clusters=k) 
     labels2 = kmeans2.fit_predict(matrix2)
     
     # Compute the cluster centroids

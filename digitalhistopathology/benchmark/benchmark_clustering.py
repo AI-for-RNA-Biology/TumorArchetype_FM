@@ -709,7 +709,7 @@ class BenchmarkClustering(BenchmarkBase):
         # Visualization UMAP-kmeans per slide
         self.set_best_UMAP_per_slide()
         # self.UMAP_best_params_clustering_visualization_per_slide()
-        # self.plot_slides_with_clusters(obsm='umap')
+        self.plot_slides_with_clusters(obsm='umap')
 
         # Visualization UMAP k-means overall all slides
         n_patients = self.image_embeddings[self.pipelines_list[0]].emb.obs[self.group].nunique()

@@ -20,6 +20,7 @@ import warnings
 from matplotlib import cm
 from scipy.cluster.hierarchy import dendrogram
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import product
 from kneed import KneeLocator
 import pandas as pd
 import anndata as ad
@@ -897,7 +898,7 @@ class FindClusters(DimRed):
                 json.dump(results, fp)
             print("Save results to {}".format(saving_path), flush=True)
 
-    def UMAP_validation_unsupervised_clustering(self, 
+    def UMAP_validation_unsupervised_clustering_non_parallel(self, 
                                             algo='kmeans', 
                                             n_neighbors_list=[10, 30, 50, 100, 150, 200, 250, 300, 350, 400],
                                             min_dist_list=[0.001, 0.1], 
@@ -935,6 +936,94 @@ class FindClusters(DimRed):
                     all_runs.append([n_neighbors, min_dist, n_components, ari])
                     
         df_all_runs = pd.DataFrame(all_runs, columns=['n_neighbors', 'min_dist', 'n_components', 'ari'])
+        return best_ari, best_params, df_all_runs
+    
+    def UMAP_validation_unsupervised_clustering(
+        self,
+        algo="kmeans",
+        n_neighbors_list=[10, 30, 50, 100, 150, 200, 250, 300, 350, 400],
+        min_dist_list=[0.001, 0.1],
+        n_components_list=[2],
+        n_clusters=None,
+    ):
+        """
+        Perform UMAP validation using unsupervised clustering to find the best parameters.
+        This method iterates over combinations of UMAP parameters (n_neighbors, min_dist, n_components)
+        and performs unsupervised clustering using the specified algorithm. It returns the best
+        Adjusted Rand Index (ARI) score and the corresponding parameters.
+        Parameters:
+        algo (str): The clustering algorithm to use.
+        n_neighbors_list (list): List of n_neighbors values to try.
+        min_dist_list (list): List of min_dist values to try.
+        n_components_list (list): List of n_components values to try.
+        n_clusters (int, optional): The number of clusters to form. Default is None.
+        Returns:
+        tuple: A tuple containing the best ARI score (float) and a dictionary of the best parameters.
+        """
+        all_runs = []
+        best_ari = -1
+        best_params = {"n_neighbors": None, "min_dist": None, "n_components": None}
+
+        if self.emb is None:
+            raise ValueError("Embeddings (self.emb) must be set before running UMAP validation.")
+
+        param_grid = list(product(n_neighbors_list, min_dist_list, n_components_list))
+        if len(param_grid) == 0:
+            raise ValueError("Parameter grid is empty. Provide at least one combination of UMAP parameters.")
+
+        max_workers = min(len(param_grid), os.cpu_count() or 1)
+
+        def process_combination(params):
+            n_neighbors, min_dist, n_components = params
+            print(
+                f"n_neighbors: {n_neighbors}, min_dist: {min_dist}, n_components: {n_components}",
+                flush=True,
+            )
+            local_finder = self.__class__(
+                emb=self.emb.copy(),
+                saving_plots=self.saving_plots,
+                result_saving_folder=self.result_saving_folder,
+            )
+            local_finder.compute_umap(
+                n_components=n_components,
+                n_neighbors=n_neighbors,
+                min_dist=min_dist,
+            )
+            clustering_results = local_finder.unsupervised_clustering(
+                n_clusters=n_clusters,
+                algo=algo,
+                obsm="umap",
+            )
+            if clustering_results is None or "ari" not in clustering_results:
+                raise ValueError(
+                    "Unsupervised clustering did not return an ARI score for the evaluated parameters."
+                )
+            ari = clustering_results["ari"]
+            return n_neighbors, min_dist, n_components, ari
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_combination, params): params for params in param_grid}
+            for future in as_completed(futures):
+                default_params = futures[future]
+                try:
+                    n_neighbors, min_dist, n_components, ari = future.result()
+                except Exception as exc:
+                    n_neighbors, min_dist, n_components = default_params
+                    print(
+                        f"Error processing n_neighbors={n_neighbors}, min_dist={min_dist}, n_components={n_components}: {exc}",
+                        flush=True,
+                    )
+                    ari = np.nan
+                all_runs.append([n_neighbors, min_dist, n_components, ari])
+                if not np.isnan(ari) and ari > best_ari:
+                    best_ari = ari
+                    best_params = {
+                        "n_neighbors": n_neighbors,
+                        "min_dist": min_dist,
+                        "n_components": n_components,
+                    }
+
+        df_all_runs = pd.DataFrame(all_runs, columns=["n_neighbors", "min_dist", "n_components", "ari"])
         return best_ari, best_params, df_all_runs
     
     def unsupervised_clustering_no_labels(self,
