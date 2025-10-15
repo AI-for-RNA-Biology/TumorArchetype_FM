@@ -52,7 +52,7 @@ optim:
 train:
   batch_size: 25
   data_path: results/TNBC/compute_patches/invasive
-  output_dir: pretrained_models/TNBC/TNBC_uni_explora_koleo_16384_prototypes
+  output_dir: pretrained_models/extended_uni/TNBC/TNBC_uni_explora_koleo_16384_prototypes
   embed_dim: 1024
   seed: 0
   num_workers: 4

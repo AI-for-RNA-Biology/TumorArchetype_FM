@@ -53,7 +53,7 @@ train:
   batch_size: 25
   split: 0.95
   data_path: results/TNBC/compute_patches/invasive
-  output_dir: pretrained_models/TNBC/TNBC_uni_full_kde_16384_prototypes
+  output_dir: pretrained_models/extended_uni/TNBC/TNBC_uni_full_kde_16384_prototypes
   seed: 0
   num_workers: 4
   cache_dataset: true
