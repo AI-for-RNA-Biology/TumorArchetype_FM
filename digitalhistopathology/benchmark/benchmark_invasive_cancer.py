@@ -167,17 +167,25 @@ class BenchmarkInvasive(BenchmarkBase):
         
         
         ## Load the molecular embeddings: the full one and the one with the labels
-        molecular_emb = GeneEmbedding()
+        molecular_emb = GeneEmbedding(name=self.molecular_name)
         molecular_emb.emb = self.molecular_emb.emb.copy()
         molecular_emb.emb.obs['predicted_label'] = [labels.loc[idx, 'predicted_label'] if idx in labels.index else "not invasive" for idx in molecular_emb.emb.obs.index]
+
+
         
-        molecular_emb_labeled = GeneEmbedding()
+        # if not 'umap' in molecular_emb.emb.obsm.keys():
+        #     print("Computing UMAP for the molecular embedding...", flush=True)
+        #     molecular_emb.compute_umap(palette=self.dataset.PALETTE,
+        #                                        figures_folder=os.path.join(self.saving_folder, model))
+            
+        molecular_emb_labeled = GeneEmbedding(name=f"{self.molecular_name}_invasive_only")
         molecular_emb_labeled.emb = molecular_emb.emb[~molecular_emb.emb.obs['predicted_label'].isna()]
         molecular_emb_labeled.emb = molecular_emb_labeled.emb[~(molecular_emb_labeled.emb.obs['predicted_label'] == 'not invasive')]
         
         if not 'umap' in molecular_emb_labeled.emb.obsm.keys():
             print("Computing UMAP for the molecular embedding...", flush=True)
-            molecular_emb_labeled.compute_umap(palette=self.dataset.PALETTE)
+            molecular_emb_labeled.compute_umap(palette=self.dataset.PALETTE,
+                                               figures_folder=os.path.join(self.saving_folder, model))
         
         if "tumor" not in molecular_emb_labeled.emb.obs.columns:
             molecular_emb_labeled.emb.obs['tumor'] = [idx.split("_")[0] for idx in molecular_emb_labeled.emb.obs.index]
@@ -283,13 +291,21 @@ class BenchmarkInvasive(BenchmarkBase):
         # Compute quantized wasserstein on the UMAP results
 
             
-        # if not os.path.exists(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_{n_cluster}_clusters.csv")):
-        print(f"Computing quantized wasserstein distance in the image embedding space for model {model}...", flush=True)
-        df_w = self.invasive_image_embeddings[model].compute_quantized_wasserstein_distance_between_clusters(cluster_col='predicted_label', 
-                                                                                                                    layer=None, 
-                                                                                                                    ref_space=self.ref_model_emb)
-            
-        df_w.to_csv(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_{n_cluster}_clusters.csv"))
+        if not os.path.exists(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_{n_cluster}_clusters.csv")):
+            print(f"Computing quantized wasserstein distance in the image embedding space for model {model}...", flush=True)
+            df_w = self.invasive_image_embeddings[model].compute_quantized_wasserstein_distance_between_clusters(cluster_col='predicted_label', 
+                                                                                                                        layer=None, 
+                                                                                                                        ref_space=self.ref_model_emb)
+                
+            df_w.to_csv(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_{n_cluster}_clusters.csv"))
+
+        if not os.path.exists(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_molecular_{self.molecular_name}_{n_cluster}_clusters.csv")):
+            print(f"Computing quantized wasserstein distance in the molecular embedding space for model {model}...", flush=True)
+            df_w = molecular_emb_labeled.compute_quantized_wasserstein_distance_between_clusters(cluster_col='predicted_label', 
+                                                                                                                        layer=None, 
+                                                                                                                        ref_space=None)
+                
+            df_w.to_csv(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_{model}_molecular_{self.molecular_name}_{n_cluster}_clusters.csv"))
 
         for patient in molecular_emb_labeled.emb.obs[self.group].unique():
             
@@ -426,7 +442,8 @@ class BenchmarkInvasive(BenchmarkBase):
                                                        n_components=2,
                                                        algo=algo, 
                                                        n_clusters=n_clust, 
-                                                       saving_folder=os.path.join(saving_folder, model_name))
+                                                       saving_folder=os.path.join(saving_folder, model_name),
+                                                       saving_ARI_patient=True)
                 
         best_umap_params = image_embedding.select_best_umap_parameters(saving_folder = os.path.join(saving_folder, model_name),
                                                             score='silhouette_score')

@@ -78,16 +78,15 @@ def get_optimal_cluster_number_one_model(files):
                 
                 model_clusters['patient_label'] = [x.split('_')[0] for x in model_clusters['samples']]
                 # Convert labels to integers
-                #model_clusters['patient_label_int'] = [ord(label) - ord('A') - 1 for label in model_clusters['patient_label']]
-                unique_labels = sorted(set(model_clusters['patient_label']))
-                label_to_int = {label: idx for idx, label in enumerate(unique_labels)}
-                model_clusters['patient_label_int'] = [label_to_int[label] for label in model_clusters['patient_label']]
+                # unique_labels = sorted(set(model_clusters['patient_label']))
+                # label_to_int = {label: idx for idx, label in enumerate(unique_labels)}
+                # model_clusters['patient_label_int'] = [label_to_int[label] for label in model_clusters['patient_label']]
                 
                 df_model_clusters = pd.DataFrame(model_clusters[str(min_dist)]).T
                 df_model_clusters = df_model_clusters.reset_index().rename(columns={"index": "n_neighbors"})
                 
                 df_model_clusters["n_clusters"] = k
-                df_model_clusters["ARI_patient"] = df_model_clusters['labels'].apply(lambda x: adjusted_rand_score(model_clusters['patient_label_int'], x))
+                # df_model_clusters["ARI_patient"] = df_model_clusters['labels'].apply(lambda x: adjusted_rand_score(model_clusters['patient_label_int'], x))
                 dfs_clusters.append(df_model_clusters)
                         
         dfs_clusters = pd.concat(dfs_clusters) 
@@ -103,7 +102,10 @@ def get_optimal_cluster_number_one_model(files):
 
     df_sil_ARI = df_all.loc[idx]
 
-    df_sil_ARI['euclidian_dist_to_optimal'] = np.sqrt((df_sil_ARI['silhouette_score'] - 1)**2 + (df_sil_ARI['ARI_patient'] - 0)**2)
+    df_sil_ARI['euclidian_dist_to_optimal'] = df_sil_ARI.apply(lambda row: np.sqrt((row['silhouette_score'] - 1)**2 + (row['ARI_patient'] - 0)**2), axis=1)
+
+    # TODO: REMOVE AFTER THIS TEST
+    # df_sil_ARI = df_sil_ARI[df_sil_ARI['n_clusters'] == 5]
 
     opti_clusters = df_sil_ARI.loc[df_sil_ARI['euclidian_dist_to_optimal'].idxmin()]
 

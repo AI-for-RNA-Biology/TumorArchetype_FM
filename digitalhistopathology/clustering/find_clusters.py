@@ -493,6 +493,26 @@ class FindClusters(DimRed):
                     plt.show()
             else:
                 return ax
+
+    def get_ARI_patient_umap(self,
+                             labels):
+
+        unique_patients = self.emb.obs['tumor'].unique()
+        
+        ordered_patients = self.emb.obs["tumor"].values
+
+        df_labels = pd.DataFrame({'labels': labels, 'tumor': ordered_patients})
+        boostraped_ARI_patients = []
+        from digitalhistopathology.embeddings.embedding import Embedding
+
+        n_labels = len(set(labels))
+        for i in range(100):
+            patients = np.random.choice(unique_patients, size=n_labels, replace=False)
+            subset = df_labels[df_labels['tumor'].isin(patients)]
+            ARI_patient = adjusted_rand_score(subset['tumor'], subset['labels'])
+            boostraped_ARI_patients.append(ARI_patient)
+            return np.mean(boostraped_ARI_patients)
+
             
     def clustering_across_umap_parameters(
         self,
@@ -502,6 +522,7 @@ class FindClusters(DimRed):
         algo="kmeans",
         n_clusters=6,
         saving_folder=None,
+        saving_ARI_patient=False,
     ):
         """Parallelized version of clustering_across_umap_parameters."""
         results = {}
@@ -512,6 +533,8 @@ class FindClusters(DimRed):
             self.compute_umap(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist)
             matrix = self.emb.obsm["umap"].copy()
             scores = clustering_scores(matrix=matrix, n_clusters=n_clusters, algo=algo, name="umap")
+            if saving_ARI_patient:
+                scores["ARI_patient"] = self.get_ARI_patient_umap(labels=scores['labels'])
             return min_dist, n_neighbors, scores
 
         # Use ThreadPoolExecutor for parallel processing
@@ -945,6 +968,7 @@ class FindClusters(DimRed):
         min_dist_list=[0.001, 0.1],
         n_components_list=[2],
         n_clusters=None,
+        max_workers=None
     ):
         """
         Perform UMAP validation using unsupervised clustering to find the best parameters.
@@ -971,7 +995,10 @@ class FindClusters(DimRed):
         if len(param_grid) == 0:
             raise ValueError("Parameter grid is empty. Provide at least one combination of UMAP parameters.")
 
-        max_workers = min(len(param_grid), os.cpu_count() or 1)
+        if max_workers is None:
+            max_workers = min(len(param_grid), os.cpu_count() or 1)
+        else:
+            max_workers = max_workers
 
         def process_combination(params):
             n_neighbors, min_dist, n_components = params

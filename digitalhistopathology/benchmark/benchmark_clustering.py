@@ -382,7 +382,7 @@ class BenchmarkClustering(BenchmarkBase):
                     plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
                     plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
                 
-                with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_{i}_patients{add_filename}.json'), 'w') as f:
+                with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json'), 'w') as f:
                     json.dump({model: boostraped_ARI_patients[model]}, f, indent=4)
                 
         with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{n_patients}_patients{add_filename}.json'), 'w') as f:
@@ -632,7 +632,7 @@ class BenchmarkClustering(BenchmarkBase):
 
                 print(f"File {os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_all{add_filename}.json')} doesn't exist", flush=True)
 
-                best_ari, best_params, df_all_runs = embedding.UMAP_validation_unsupervised_clustering(n_clusters=n_clusters,
+                best_ari, best_params, df_all_runs = embedding.UMAP_validation_unsupervised_clustering_non_parallel(n_clusters=n_clusters,
                                                                                           n_neighbors_list=n_neighbors_list,
                                                                                           min_dist_list=min_dist_list,
                                                                                           n_components_list=n_components_list,
@@ -715,7 +715,7 @@ class BenchmarkClustering(BenchmarkBase):
         n_patients = self.image_embeddings[self.pipelines_list[0]].emb.obs[self.group].nunique()
         
         self.set_best_UMAP_overall()
-        if n_patients <= 0:
+        if n_patients <= 10:
             ari_patients = self.compute_umap_ARI_patient_for_batch_control()
         self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', palette='Set3')
         self.UMAP_best_params_clustering_visualization_overall(hue='tumor', palette='Accent')

@@ -227,6 +227,7 @@ class BenchmarkBase:
             subset_emb = ImageEmbedding()
             subset_emb.emb = whole_emb.emb[~whole_emb.emb.obs['label'].isna()]
             subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+            subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'undetermined']
             annotated_embeddings[model] = subset_emb
         
         self.annotated_embeddings = annotated_embeddings
@@ -235,6 +236,7 @@ class BenchmarkBase:
             subset_emb = Embedding()
             subset_emb.emb = self.ef.emb[~self.ef.emb.obs['label'].isna()]
             subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+            subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'undetermined']
             self.annotated_embeddings['handcrafted_features'] = subset_emb
 
 
