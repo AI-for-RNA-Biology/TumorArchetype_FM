@@ -1,6 +1,6 @@
 {
 
-    "patches_info_path": "../../results/compute_patches/TNBC/patches_info.pkl.gz",
+    "patches_info_path": "../../results/TNBC/compute_patches/all/patches_info.pkl.gz",
     
     "base_color_palette": ["deepskyblue", "limegreen", "deeppink", "gold", "mediumpurple", "orangered", "lightgrey", "sienna"],
     "base_model_palette": {
@@ -83,7 +83,9 @@
 
     "retrained_benchmark_folder2": "../../results/TNBC/benchmark/uni_full_models/",
 
-    "dataset": "TNBC"
+    "dataset": "TNBC",
+
+    "handcrafted_features_path": "../../results/TNBC/engineered_features/scMTOP/TNBC/TNBC_scMTOP.csv"
 
 
 

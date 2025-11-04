@@ -17,7 +17,7 @@ if (length(args) < 2) {
   cat("  input_rds: Path to the Seurat object RDS file\n")
   cat("  output_parquet: Path to output parquet file\n")
   cat("  batch_column: Column name for batch correction (default: 'patient')\n")
-  cat("  use_scale_data: Use scaled data (TRUE) or raw counts (FALSE, default: FALSE)\n")
+  cat("  use_scale_data: Use scaled data (TRUE) or normalized counts (FALSE, default: FALSE)\n")
   quit(status = 1)
 }
 

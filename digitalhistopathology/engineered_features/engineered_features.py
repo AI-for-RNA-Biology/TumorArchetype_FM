@@ -819,6 +819,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         emb_dfs = []
 
         csv_files = glob.glob(os.path.join(self.save_path, "*scMTOP.csv"))
+        print(f"Found {len(csv_files)} scMTOP csv files in {self.save_path}", flush=True)
         for file in csv_files:
             sample_name = os.path.basename(file).split('_scMTOP.csv')[0]
             if sample_name != self.dataset_name:

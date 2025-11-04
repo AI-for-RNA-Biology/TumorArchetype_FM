@@ -74,6 +74,7 @@ class BenchmarkInvasive(BenchmarkBase):
 
             print(f"Loaded molecular embeddings with shape {self.molecular_emb.emb.X.shape}")
             print(f"Molecular embeddings have labels: {self.molecular_emb.emb.obs.columns.tolist()}")
+            print(f"First lines of molecular embeddings: {self.molecular_emb.emb.X[:5, :]}")
 
         else:
             self.molecular_emb = None

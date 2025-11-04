@@ -171,18 +171,37 @@ format_seurat_with_predicted_csv <- function(seurat_object, path_to_predicted_cl
   predicted_clusters_uni_metadata <- predicted_clusters_uni_metadata %>% select(-label)
   rownames(predicted_clusters_uni_metadata) <- gsub("_", "-", rownames(predicted_clusters_uni_metadata))
   
+  cat("Predicted clusters rows:", nrow(predicted_clusters_uni_metadata), "\n")
+  cat("Sample predicted rownames:", head(rownames(predicted_clusters_uni_metadata), 3), "\n")
+  cat("Predicted columns:", colnames(predicted_clusters_uni_metadata), "\n")
+  
   predicted_clusters_uni_metadata <- predicted_clusters_uni_metadata %>% rownames_to_column(var = "rowname")
-  
-  
+
+
+  rownames(seurat_object@meta.data) <- gsub("_", "-", rownames(seurat_object@meta.data))
   meta_data <- seurat_object@meta.data %>%
     rownames_to_column(var = "rowname")
   
+  cat("Seurat metadata rows:", nrow(meta_data), "\n")
+  cat("Sample seurat rownames:", head(meta_data$rowname, 3), "\n")
+  
   merged_meta_data <- merge(predicted_clusters_uni_metadata, meta_data, by = "rowname")
+  cat("Merged metadata rows:", nrow(merged_meta_data), "\n")
+  cat("Merged columns:", colnames(merged_meta_data), "\n")
+  cat("predicted_label summary:", summary(merged_meta_data$predicted_label), "\n")
+  
   rownames(merged_meta_data) <- merged_meta_data$rowname
   merged_meta_data <- merged_meta_data %>% select(-rowname)
   
-  seurat_object_predicted <- seurat_object[ , rownames(merged_meta_data)]
+  # Subset using the subset function instead of [ operator
+  seurat_object_predicted <- subset(seurat_object, cells = rownames(merged_meta_data))
   seurat_object_predicted@meta.data <- merged_meta_data
+  
+  # Check if predicted_label exists
+  if (!"predicted_label" %in% colnames(seurat_object_predicted@meta.data)) {
+    stop("Error: predicted_label column not found in metadata after merge")
+  }
+  
   # Set the identities in the Seurat object to your custom labels
   Idents(seurat_object_predicted) <- seurat_object_predicted@meta.data$predicted_label
   
@@ -314,4 +333,49 @@ load_dge_pathways_analysis_per_clusters <- function(directory_name, add_name = "
   }
   
   return(list(markers = markers, gprofiler_results = gprofiler_results))
+}
+
+get_pathways_heatmaps <- function(labels_clusters_uni_file, seurat_object, res_true_labels, upregulated = TRUE, add_name = "") {
+  directory_name <- dirname(labels_clusters_uni_file)
+  
+  if (upregulated == TRUE){
+    name = paste0("upregulated", add_name)
+  } else {
+    name = paste0("downregulated", add_name)
+  }
+  
+  # Define file paths
+  file_with_true_labels <- paste0(directory_name, "/", name, "_result_matrix_with_true_labels.csv")
+  file_no_labels <- paste0(directory_name, "/", name, "_result_matrix_no_labels.csv")
+  
+  # Check if files already exist
+  if (file.exists(file_with_true_labels) && file.exists(file_no_labels)) {
+    result_matrix_true_labels <- read.csv(file_with_true_labels, row.names = 1)
+    result_matrix <- read.csv(file_no_labels, row.names = 1)
+  } else {
+    seurat_object_predicted <- format_seurat_with_predicted_csv(seurat_object = seurat_object, path_to_predicted_clusters = labels_clusters_uni_file)
+    # Upregulated pathways
+    res <- get_clusters_DGE_BPs(seurat_object = seurat_object_predicted, upregulated = upregulated)
+    
+    save_dge_pathways_analysis_per_clusters(res = res, directory_name = directory_name, add_name = add_name)
+    # With true labels
+    result_matrix_true_labels <- get_pathway_scores_across_all_clusters(res = res, res_true_labels = res_true_labels)
+    # Without numbers
+    heatmap_pathways(result_matrix_true_labels, display_numbers = FALSE, directory_name = directory_name, name = paste0("_", name, "_with_true_labels"))
+    # With numbers
+    heatmap_pathways(result_matrix_true_labels, display_numbers = TRUE, directory_name = directory_name, name = paste0("_", name, "_with_true_labels_with_numbers"))
+    
+    # Without true labels
+    result_matrix <- get_pathway_scores_across_all_clusters(res = res)
+    # Without numbers
+    heatmap_pathways(result_matrix, display_numbers = FALSE, directory_name = directory_name, name = paste0("_", name, "_no_labels"))
+    # With numbers
+    heatmap_pathways(result_matrix, display_numbers = TRUE, directory_name = directory_name, name = paste0("_", name, "_no_labels_with_numbers"))
+    
+    # Save results to CSV
+    write.csv(result_matrix_true_labels, file_with_true_labels)
+    write.csv(result_matrix, file_no_labels)
+  }
+  
+  return(list(result_matrix_true_labels = result_matrix_true_labels, result_matrix = result_matrix))
 }
