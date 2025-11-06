@@ -555,27 +555,31 @@ class BenchmarkClustering(BenchmarkBase):
                                     force_loading=False):
 
         best_ari_umap = {}
+
         print(f"Embeddings per patient: {self.embeddings_per_slide}", flush=True)
-        # For each model
-        # for model in self.embeddings_per_slide.keys():
-        for model in list(self.embeddings_per_slide.keys()):
-            print(f"Model: {model}", flush=True)
-            best_ari_umap[model] = {}
-            if force_loading:
+
+        if force_loading:
+            
+            all_files = glob.glob(os.path.join(self.saving_folder, f'best_umap_ari_model_*_patient_*.json'))
+            models = [os.path.basename(f).split("best_umap_ari_model_")[1].split("_patient")[0] for f in all_files]
+            unique_models = list(set(models))
+            for model in unique_models:
                 print(f"Force loading best UMAP parameters for model {model} for existing patients...", flush=True)
+                best_ari_umap[model] = {}
                 for file in glob.glob(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_*.json')):
                     patient_name = os.path.basename(file).split("_patient_")[1].split('.json')[0]
                     with open(file, 'r') as f:
                         best_ari_umap[model][patient_name] = json.load(f)
 
-            # elif self.embeddings_per_slide is not None:
-            #     if len(glob.glob(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_*.json'))) == len(self.embeddings_per_slide[model]):
-            #         print(f"Loading best UMAP parameters for model {model}...", flush=True)
-            #         for file in glob.glob(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_*.json')):
-            #             with open(file, 'r') as f:
-            #                 best_ari_umap[model][os.path.basename(file).split('_')[6]] = json.load(f)
-                
-            else:
+        else:
+        # For each model
+        # for model in self.embeddings_per_slide.keys():
+            for model in list(self.embeddings_per_slide.keys()):
+                print(f"Model: {model}", flush=True)
+                best_ari_umap[model] = {}
+
+
+
                 for slide, subset_emb in self.embeddings_per_slide[model].items():
 
                     n_labeled_patches = subset_emb.emb.obs[(subset_emb.emb.obs['label'] != 'nan') & ~(subset_emb.emb.obs['label'].isna())].shape[0]
@@ -703,6 +707,11 @@ class BenchmarkClustering(BenchmarkBase):
             if self.annotated_embeddings is not None and len(self.annotated_embeddings) > 0:
                 embeddings = [self.annotated_embeddings[model] for model in models if self.annotated_embeddings is not None]
             add_filename = "_annotated_only"
+
+
+            if self.ef is not None:
+                models.append('handcrafted_features')
+                embeddings.append(self.annotated_embeddings["handcrafted_features"])
         else:
             # embeddings = list(self.image_embeddings.values())
             # models = list(self.image_embeddings.keys())
