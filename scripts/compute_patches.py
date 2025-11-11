@@ -12,7 +12,7 @@ import argparse
 
 import sys
 sys.path.append(os.getcwd())
-from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset, VisiumHDdataset
 from digitalhistopathology.patch_generator import PatchGenerator
 
 
@@ -37,7 +37,8 @@ def create_patch_generator(dataset_name):
         # Set the other parameters
         patches_number = None
         spots_df = None
-
+        allow_offset_for_random_patches = False
+        
     elif dataset_name == "TNBC":
 
         saving_folder = "results/TNBC/compute_patches/all/"
@@ -53,10 +54,29 @@ def create_patch_generator(dataset_name):
 
         patches_number = 900
         spots_df = all_dataframes
-
-    else:
-        raise Exception("Dataset not found")
-
+        allow_offset_for_random_patches = False
+        
+    elif dataset_name == "Ovarian":
+        saving_folder = "results/Ovarian/compute_patches/all"
+        dataset = VisiumHDdataset(patches_folder=saving_folder, 
+                                  name="Ovarian", 
+                                  raw_images_dir = "/storage/research/dbmr_luisierlab/database/Ovarian_Visium_GTOP/Visium_HD",
+                                  spaceranger_dir = "/storage/research/dbmr_luisierlab/temp/lfournier/Data/Ovarian_Visium_GTOP/hg38/spaceranger",
+                                  spot_diameter_micron=100
+                                  )
+        
+        dataset.preprocess(gtf_path="/storage/research/dbmr_luisierlab/group/genomics/annotation/hg38/GENCODE/gencode.v44.chr_patch_hapl_scaff.annotation.gtf")
+        
+        images_filenames = dataset.images_filenames
+        spots_df = dataset.all_dataframes
+        spot_diameter = dataset.spot_diameter
+        print(images_filenames)
+        
+        genes_spots_files = None
+        patches_number = None
+        allow_offset_for_random_patches = True
+        
+        
     p = PatchGenerator(
         images_filenames_random_patches=images_filenames,
         patch_size_pixels=spot_diameter,
@@ -74,6 +94,7 @@ def create_patch_generator(dataset_name):
         spot_diameter=spot_diameter,
         filter_with_neighbours=False,
         log_file="logs/compute_patches.log",
+        allow_offset_for_random_patches=allow_offset_for_random_patches
     )
 
     return p

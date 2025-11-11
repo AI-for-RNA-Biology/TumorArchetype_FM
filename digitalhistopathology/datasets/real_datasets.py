@@ -7,13 +7,16 @@
 #
 import glob
 import math
+from multiprocessing.resource_tracker import getfd
 import os
 import pandas as pd
 import numpy as np
 import seaborn as sns
 from PIL import Image
 from json import load
+from digitalhistopathology.datasets.spaceranger_utils import aggregate_spots_to_resolution, load_spaceranger_coding_genes
 from natsort import natsorted
+import openslide
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -421,7 +424,7 @@ class TNBCDataset(SpatialDataset):
             self.init_patches_filenames()
         self.label_filenames = sorted(glob.glob("results/TNBC/compute_patches/all/*labels.csv"))
 
-        self.spot_diameter = 348
+        self.spot_diameter = 253
         
         if gene_counts_path is not None:
             self.genes_count_filenames = sorted(
@@ -853,3 +856,88 @@ class TNBCDataset(SpatialDataset):
         palette_2[9] = palette[9]
         palette_2[10] = sns.color_palette(palette="colorblind")[5]
         return palette_2
+    
+
+class VisiumHDdataset(SpatialDataset):
+    def __init__(self, 
+                 patches_folder=None, 
+                 saving_emb_folder=None, 
+                 raw_images_dir=None,
+                 spaceranger_dir=None, 
+                 spot_diameter_micron=100,
+                 name="VisiumHD"):
+        
+        # For ovarian
+        # name = "Ovarian"
+        # raw_images_dir = "/storage/research/dbmr_luisierlab/database/Ovarian_Visium_GTOP/Visium_HD"
+        # spaceranger_dir = "/storage/research/dbmr_luisierlab/temp/lfournier/Data/Ovarian_Visium_GTOP/hg38/spaceranger"
+        
+        """
+        Args:
+            patches_folder (str, optional): Folder that contains patches. Defaults to None.
+            saving_emb_folder (str, optional): Path to folder where to save the embeddings. Defaults to None.
+        """
+        super().__init__(patches_folder)
+        self.saving_emb_folder = saving_emb_folder
+        self.name = name
+        self.spaceranger_dir = spaceranger_dir
+        self.spot_diameter_micron = spot_diameter_micron
+        self.raw_images_dir = raw_images_dir
+        
+        # Image embeddings
+        if patches_folder is not None:
+            self.init_patches_filenames()
+
+        self.images_filenames = glob.glob(os.path.join(self.raw_images_dir, "**", "*.qptiff"), recursive=True)
+
+        self.spot_diameter = self.get_spot_diameter()
+        print(f"Spot diameter (in pixels): {self.spot_diameter}")
+        
+        
+    def get_spot_diameter(self):
+        slide = openslide.OpenSlide(self.images_filenames[0])
+        x_resolution = float(slide.properties.get('tiff.XResolution', 0))
+        microns_per_pixel_x = 10000 / x_resolution if x_resolution > 0 else None
+        spot_diameter = round(self.spot_diameter_micron / microns_per_pixel_x) if microns_per_pixel_x else None
+        return spot_diameter
+    
+    def preprocess(self, gtf_path=None):
+        sample_dirs = [d for d in os.listdir(self.spaceranger_dir) if os.path.isdir(os.path.join(self.spaceranger_dir, d))] 
+        
+        # Ensure to have the same order than self.images_filenames
+        filenames = [os.path.basename(f).replace('.qptiff', '').replace('-', '_') for f in self.images_filenames]
+        all_dataframes = []
+        
+        
+        for filename in filenames:
+            sample_dirs_simplified = ['_'.join(d.split('_')[1:]) for d in sample_dirs]
+            # find the sample dir that matches the filename
+            matched_sample_simplified_dir = [d for d in sample_dirs_simplified if d in filename]
+            if len(matched_sample_simplified_dir) == 0:
+                raise Exception(f"No matching sample dir found for image filename: {filename}") 
+            elif len(matched_sample_simplified_dir) > 1:
+                raise Exception(f"Multiple matching sample dirs found for image filename: {filename}: {matched_sample_simplified_dir}")
+            else:
+                sample_dir = sample_dirs[sample_dirs_simplified.index(matched_sample_simplified_dir[0])]
+            
+                adata_002um_coding = load_spaceranger_coding_genes(visium_output_dir=os.path.join(self.spaceranger_dir, sample_dir, "outs"),
+                                                                gtf_path=gtf_path, 
+                                                                resolution="002um", 
+                                                                filtered=False)
+                
+                adata_agg = aggregate_spots_to_resolution(adata_002um_coding, 
+                                                            current_resolution_um=2, 
+                                                            target_resolution_um=self.spot_diameter_micron)
+
+                adata_agg.obs["source_file"] = sample_dir
+                adata_agg.obs["pixel_x"] = adata_agg.obs["pxl_row_in_fullres"]
+                adata_agg.obs["pixel_y"] = adata_agg.obs["pxl_col_in_fullres"]
+                adata_agg.obs["x"] = adata_agg.obs["large_grid_row"]
+                adata_agg.obs["y"] = adata_agg.obs["large_grid_col"]
+            
+            all_dataframes.append(adata_agg.obs)
+        
+        self.all_dataframes = all_dataframes
+        
+    
+
