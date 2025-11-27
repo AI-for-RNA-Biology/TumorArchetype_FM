@@ -14,9 +14,11 @@ import numpy as np
 import seaborn as sns
 from PIL import Image
 from json import load
-from digitalhistopathology.datasets.spaceranger_utils import aggregate_spots_to_resolution, load_spaceranger_coding_genes
+from digitalhistopathology.datasets.spaceranger_utils import *
 from natsort import natsorted
 import openslide
+import gzip
+import pickle
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -67,10 +69,9 @@ class HER2Dataset(SpatialDataset):
             saving_emb_folder (str, optional): Path to folder where to save the embeddings. Defaults to None.
         """
 
-        super().__init__(patches_folder)
-        self.saving_emb_folder = saving_emb_folder
-        self.name = "HER2"
-        super().__init__(patches_folder)
+        super().__init__(patches_folder=patches_folder, 
+                         saving_emb_folder=saving_emb_folder, 
+                         name="HER2")
         # Image embeddings
         if patches_folder is not None:
             self.init_patches_filenames()
@@ -93,46 +94,6 @@ class HER2Dataset(SpatialDataset):
         self.samples_names = [
             f.split("/")[-1].split(".")[0][0:2] for f in self.images_filenames
         ]
-
-    def get_image_embeddings(self, model, filename="ie", emb_path=None):
-        """Compute the image embedding or load it if it already exists.
-
-        Args:
-            model (models.PretrainedModel): Pretrained deep learning vision encoder.
-            filename (str, optional): Filename of the .h5ad image embedding. Defaults to "ie".
-
-        Returns:
-            image_embedding.ImageEmbedding: image embedding
-        """
-        self.init_patches_filenames()
-        ie = ImageEmbedding(
-            patches_filenames=self.patches_filenames,
-            patches_info_filename=self.patches_info_filename,
-            label_files=self.label_filenames,
-            pretrained_model=model,
-            name=self.name + "_" + model.name,
-        )
-        try:
-            if os.path.exists(self.saving_emb_folder):
-                loading_file = os.path.join(
-                    self.saving_emb_folder, "{}.h5ad".format(filename)
-                )
-            elif emb_path is not None:
-                loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
-            else:
-                loading_file = (
-                    "results/HER2/embeddings/images_embeddings/save/{}/{}.h5ad".format(
-                        model.name.lower(), self.saving_emb_folder
-                    )
-                )
-            ie.load_embeddings(loading_file)
-            if "label" not in ie.emb.obs.columns:
-                ie.add_label()
-            print("Fill emb with: {}".format(loading_file))
-            print(ie.emb)
-        except Exception as e:
-            print("Cannot load images embeddings: {}".format(e))
-        return ie
 
     def get_gene_embeddings(
         self,
@@ -199,69 +160,6 @@ class HER2Dataset(SpatialDataset):
                 print("Cannot load genes embeddings: {}".format(e))
         return ge
 
-    def get_engineered_features(self, remove_nan=True, filename="ef", emb_path=None):
-        """Compute the engineered features or load it if it already exists.
-
-        Args:
-            remove_nan (bool, optional): If rows with NaN. Defaults to True.
-            filename (str, optional): Filename of the .h5ad engineered features. Defaults to "ef".
-
-        Returns:
-            engineered_features.EngineeredFeatures: engineered features
-        """
-        ef = EngineeredFeatures(
-            patches_info_filename=self.patches_info_filename,
-            name=self.name,
-            label_files=self.label_filenames,
-        )
-
-        if (self.saving_emb_folder is not None) and (
-            os.path.exists(self.saving_emb_folder)
-        ):
-            loading_file = os.path.join(
-                self.saving_emb_folder, "{}.h5ad".format(filename)
-            )
-        elif emb_path is not None:
-            loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
-        else:
-            loading_file = (
-                "results/HER2/embeddings/engineered_features/save/{}.h5ad".format(
-                    self.saving_emb_folder
-                )
-            )
-
-        try:
-            if (self.saving_emb_folder is not None) and (
-                os.path.exists(self.saving_emb_folder)
-            ):
-                loading_file = os.path.join(
-                    self.saving_emb_folder, "{}.h5ad".format(filename)
-                )
-            elif emb_path is not None:
-                loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
-            else:
-                loading_file = (
-                    "results/HER2/embeddings/engineered_features/save/{}.h5ad".format(
-                        self.saving_emb_folder
-                    )
-                )
-
-            print(f"loading_file: {loading_file}", flush=True)
-            ef.load_embeddings(loading_file)
-
-            if remove_nan:
-                # remove rows with nan
-                print("Remove Nan...")
-                print(ef.emb.shape)
-                ef.emb = ef.emb[~np.isnan(ef.emb.X).any(axis=1), :]
-                print(ef.emb.shape)
-            if "label" not in ef.emb.obs.columns:
-                ef.add_label()
-            print("Fill emb with: {}".format(loading_file))
-            print(ef.emb)
-        except Exception as e:
-            print("Cannot load engineered features: {}".format(e))
-        return ef
 
     def get_palette_2():
         palette = sns.color_palette(palette="bright")
@@ -416,9 +314,9 @@ class TNBCDataset(SpatialDataset):
             dataDir (str, optional): Path to the folder that contains the images. Defaults to None.
         """
         self.dataDir = dataDir
-        super().__init__(patches_folder)
-        self.saving_emb_folder = saving_emb_folder
-        self.name = "TNBC"
+        super().__init__(patches_folder=patches_folder,
+                         saving_emb_folder=saving_emb_folder,
+                         name="TNBC")
         # Image embeddings
         if patches_folder is not None:
             self.init_patches_filenames()
@@ -435,15 +333,19 @@ class TNBCDataset(SpatialDataset):
                 glob.glob("results/TNBC/count-matrices/all/*.csv")
             )
         self.genes_spots_filenames = self.label_filenames
-        self.images_filenames = [
-            os.path.join(
-                self.dataDir, "Images", "imagesHD", os.path.basename(name)[:-4] + ".jpg"
-            )
-            for name in self.genes_count_filenames
-        ]
-        self.samples_names = [
-            f.split("/")[-1].split(".")[0] for f in self.images_filenames
-        ]
+        if self.dataDir is not None:
+            self.images_filenames = [
+                os.path.join(
+                    self.dataDir, "Images", "imagesHD", os.path.basename(name)[:-4] + ".jpg"
+                )
+                for name in self.genes_count_filenames
+            ]
+            self.samples_names = [
+                f.split("/")[-1].split(".")[0] for f in self.images_filenames
+            ]
+        else:
+            self.images_filenames = None
+            self.samples_names = None
 
 
     def preprocess(self, annotated_only=True):
@@ -611,45 +513,6 @@ class TNBCDataset(SpatialDataset):
         self.all_dataframes = all_dataframes
         
 
-    def get_image_embeddings(self, model, filename="ie", emb_path=None):
-        """Compute the image embedding or load it if it already exists.
-
-        Args:
-            model (models.PretrainedModel): Pretrained deep learning vision encoder.
-            filename (str, optional): Filename of the .h5ad image embedding. Defaults to "ie".
-
-        Returns:
-            image_embedding.ImageEmbedding: image embedding
-        """
-        self.init_patches_filenames()
-        ie = ImageEmbedding(
-            patches_filenames=self.patches_filenames,
-            patches_info_filename=self.patches_info_filename,
-            label_files=self.label_filenames,
-            pretrained_model=model,
-            name=self.name + "_" + model.name,
-        )
-        try:
-            if os.path.exists(self.saving_emb_folder):
-                loading_file = os.path.join(
-                    self.saving_emb_folder, "{}.h5ad".format(filename)
-                )
-            elif emb_path is not None:
-                loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
-            else:
-                loading_file = (
-                    "results/TNBC/embeddings/images_embeddings/save/{}/{}.h5ad".format(
-                        model.name.lower(), self.saving_emb_folder
-                    )
-                )
-            ie.load_embeddings(loading_file)
-            if "label" not in ie.emb.obs.columns:
-                ie.add_label()
-            print("Fill emb with: {}".format(loading_file))
-            print(ie.emb)
-        except Exception as e:
-            print("Cannot load images embeddings: {}".format(e))
-        return ie
 
     def get_gene_embeddings(
         self,
@@ -721,69 +584,6 @@ class TNBCDataset(SpatialDataset):
                 print("Cannot load genes embeddings: {}".format(e))
         return ge
 
-    def get_engineered_features(self, remove_nan=True, filename="ef", emb_path=None):
-        """Compute the engineered features or load it if it already exists.
-
-        Args:
-            remove_nan (bool, optional): If rows with NaN. Defaults to True.
-            filename (str, optional): Filename of the .h5ad engineered features. Defaults to "ef".
-
-        Returns:
-            engineered_features.EngineeredFeatures: engineered features
-        """
-        ef = EngineeredFeatures(
-            patches_info_filename=self.patches_info_filename,
-            name=self.name,
-            label_files=self.label_filenames,
-        )
-
-        if (self.saving_emb_folder is not None) and (
-            os.path.exists(self.saving_emb_folder)
-        ):
-            loading_file = os.path.join(
-                self.saving_emb_folder, "{}.h5ad".format(filename)
-            )
-        elif emb_path is not None:
-            loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
-        else:
-            loading_file = (
-                "results/TNBC/embeddings/engineered_features/save/{}.h5ad".format(
-                    self.saving_emb_folder
-                )
-            )
-
-        try:
-            if (self.saving_emb_folder is not None) and (
-                os.path.exists(self.saving_emb_folder)
-            ):
-                loading_file = os.path.join(
-                    self.saving_emb_folder, "{}.h5ad".format(filename)
-                )
-            elif emb_path is not None:
-                loading_file = os.path.join(emb_path, "{}.h5ad".format(filename))
-            else:
-                loading_file = (
-                    "results/TNBC/embeddings/engineered_features/save/{}.h5ad".format(
-                        self.saving_emb_folder
-                    )
-                )
-
-            print(f"loading_file: {loading_file}", flush=True)
-            ef.load_embeddings(loading_file)
-
-            if remove_nan:
-                # remove rows with nan
-                print("Remove Nan...")
-                print(ef.emb.shape)
-                ef.emb = ef.emb[~np.isnan(ef.emb.X).any(axis=1), :]
-                print(ef.emb.shape)
-            if "label" not in ef.emb.obs.columns:
-                ef.add_label()
-            print("Fill emb with: {}".format(loading_file))
-            print(ef.emb)
-        except Exception as e:
-            print("Cannot load engineered features: {}".format(e))
-        return ef
 
     def _load_from_parquet(self, ge, molecular_emb_path):
         """Load gene embeddings from processed parquet file"""
@@ -859,6 +659,22 @@ class TNBCDataset(SpatialDataset):
     
 
 class VisiumHDdataset(SpatialDataset):
+
+
+    PALETTE = {
+        "invasive cancer": "red",
+        "immune infiltrate": "yellow",
+        "epithelial": "green",
+        "connective tissue": "blue",
+        "undetermined": "lightgrey",
+    }
+    ORDER_LABEL = [
+        "invasive cancer",
+        "immune infiltrate",
+        "epithelial",
+        "connective tissue",
+        "undetermined",
+    ]
     def __init__(self, 
                  patches_folder=None, 
                  saving_emb_folder=None, 
@@ -866,20 +682,16 @@ class VisiumHDdataset(SpatialDataset):
                  spaceranger_dir=None, 
                  spot_diameter_micron=100,
                  name="VisiumHD"):
-        
-        # For ovarian
-        # name = "Ovarian"
-        # raw_images_dir = "/storage/research/dbmr_luisierlab/database/Ovarian_Visium_GTOP/Visium_HD"
-        # spaceranger_dir = "/storage/research/dbmr_luisierlab/temp/lfournier/Data/Ovarian_Visium_GTOP/hg38/spaceranger"
-        
+
         """
         Args:
             patches_folder (str, optional): Folder that contains patches. Defaults to None.
             saving_emb_folder (str, optional): Path to folder where to save the embeddings. Defaults to None.
         """
-        super().__init__(patches_folder)
-        self.saving_emb_folder = saving_emb_folder
-        self.name = name
+        super().__init__(patches_folder=patches_folder,
+                         saving_emb_folder=saving_emb_folder,
+                         name=name)
+
         self.spaceranger_dir = spaceranger_dir
         self.spot_diameter_micron = spot_diameter_micron
         self.raw_images_dir = raw_images_dir
@@ -887,11 +699,21 @@ class VisiumHDdataset(SpatialDataset):
         # Image embeddings
         if patches_folder is not None:
             self.init_patches_filenames()
+        self.label_filenames = sorted(glob.glob(f"results/{self.name}/compute_patches/all/*labels.csv"))
 
-        self.images_filenames = glob.glob(os.path.join(self.raw_images_dir, "**", "*.qptiff"), recursive=True)
+        if self.raw_images_dir is not None:
+            self.images_filenames = glob.glob(os.path.join(self.raw_images_dir, "**", "*.qptiff"), recursive=True)
 
-        self.spot_diameter = self.get_spot_diameter()
-        print(f"Spot diameter (in pixels): {self.spot_diameter}")
+            self.spot_diameter = self.get_spot_diameter()
+            print(f"Spot diameter (in pixels): {self.spot_diameter}")
+            
+            self.samples_names = [
+                f.split("/")[-1].split(".")[0] for f in self.images_filenames
+            ]
+        else:
+            self.images_filenames = None
+            self.samples_names = None
+            self.spot_diameter = None
         
         
     def get_spot_diameter(self):
@@ -907,7 +729,7 @@ class VisiumHDdataset(SpatialDataset):
         # Ensure to have the same order than self.images_filenames
         filenames = [os.path.basename(f).replace('.qptiff', '').replace('-', '_') for f in self.images_filenames]
         all_dataframes = []
-        
+        gene_embeddings = []
         
         for filename in filenames:
             sample_dirs_simplified = ['_'.join(d.split('_')[1:]) for d in sample_dirs]
@@ -936,8 +758,98 @@ class VisiumHDdataset(SpatialDataset):
                 adata_agg.obs["y"] = adata_agg.obs["large_grid_col"]
             
             all_dataframes.append(adata_agg.obs)
-        
+            gene_embeddings.append(adata_agg)
+
+        self.gene_embeddings = gene_embeddings
         self.all_dataframes = all_dataframes
         
+    def get_gene_embeddings(self, gtf_path):
+        """
+        For each slide in df_patches_info_total, load the corresponding spaceranger output,
+        assign barcodes to patches, filter patches by median barcode count, and create pseudobulk AnnData.
+        
+        Parameters
+        ----------
+        df_patches_info_total : pd.DataFrame
+            DataFrame with patch information for all slides.
+        spaceranger_dir : str
+            Directory containing spaceranger outputs for samples.
+        gtf_path : str
+            Path to GTF file for gene annotation.
+            
+        Returns
+        -------
+        dict
+            Dictionary mapping slide names to their corresponding pseudobulk AnnData objects.
+        """
     
+        if self.patches_folder is not None:
+            with gzip.open(os.path.join(self.patches_folder, "patches_info.pkl.gz")) as f:
+                patches_info = pickle.load(f)
+        else:
+            raise Exception("No patches_folder provided; cannot compute gene embeddings.")
+                
+        df_patches_info_total = pd.DataFrame(patches_info)[["name", 
+                                                            "start_height_origin", 
+                                                            "start_width_origin", 
+                                                            "shape_pixel", 
+                                                            "name_origin", 
+                                                            'mpp_width']]
+        
+        adatas = []
+        for slide_name in df_patches_info_total["name_origin"].unique():
+            df_patches_info = df_patches_info_total[df_patches_info_total["name_origin"] == slide_name]
+            sample_dirs = [d for d in os.listdir(self.spaceranger_dir) if os.path.isdir(os.path.join(self.spaceranger_dir, d))] 
+            slide_name = slide_name.replace("-", "_")
+            sample_dirs_simplified = ['_'.join(d.split('_')[1:]) for d in sample_dirs]
+            matched_sample_simplified_dir = [d for d in sample_dirs_simplified if d in slide_name]
+            if len(matched_sample_simplified_dir) == 0:
+                raise Exception(f"No matching sample dir found for image filename: {slide_name}") 
+            elif len(matched_sample_simplified_dir) > 1:
+                raise Exception(f"Multiple matching sample dirs found for image filename: {slide_name}: {matched_sample_simplified_dir}")
+            else:
+                sample_dir = sample_dirs[sample_dirs_simplified.index(matched_sample_simplified_dir[0])]
+
+            # Load the spaceranger output
+            adata_002um_coding = load_spaceranger_coding_genes(visium_output_dir=os.path.join(self.spaceranger_dir, 
+                                                                                            sample_dir,
+                                                                                            "outs"),
+                                                                gtf_path=gtf_path, 
+                                                                resolution="002um", 
+                                                                filtered=False)
+
+            mini_spot_shape_micron = 2
+            mpp = df_patches_info['mpp_width'].mean()
+            mini_spot_shape_pxl = mini_spot_shape_micron / mpp
+
+            pxl_margin = round(mini_spot_shape_pxl / 2)
+
+            barcodes = assign_barcodes_to_patches_fast(df_patches_info, adata_002um_coding, pxl_margin)
+            df_patches_info['barcodes'] = df_patches_info['name'].map(barcodes)
+
+            lengths = [len(v) for v in barcodes.values()]
+            median_length = float(np.median(lengths))
+
+            # Take the patches with at least median number of barcodes; to ensure enough coverage
+            df_potential_spots = df_patches_info[df_patches_info["barcodes"].map(len) >= median_length]
+
+            adata_pseudobulk = create_pseudobulk_for_patches_from_smaller_bins(adata_002um_coding, df_potential_spots, save_path=None)
+
+            adatas.append(adata_pseudobulk)
+            
+        ge = GeneEmbedding(
+            spot_diameter_fullres=self.spot_diameter,
+            samples_names=self.samples_names,
+            genes_count_filenames=self.genes_count_filenames,
+            spots_filenames=self.genes_spots_filenames,
+            image_filenames=self.images_filenames,
+            label_files=self.label_filenames,
+            name=self.name,
+            st_method="visium_10x",
+            emb = ad.concat(adatas)
+        )
+            
+        return ge
+
+        
 

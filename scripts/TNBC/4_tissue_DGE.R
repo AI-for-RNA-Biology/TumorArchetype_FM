@@ -145,7 +145,7 @@ options(future.globals.maxSize = 8000 * 1024^2)  # 8GB limit for future objects
 start_time <- Sys.time()
 
 res_dge <- get_clusters_DGE_BPs(seurat_object_labeled, upregulated = upregulated)
-save_dge_pathways_analysis_per_clusters(res = res_dge, directory_name = output_dir, add_name = paste0("_", direction, "_true_labels"))
+save_dge_pathways_analysis_per_clusters(res = res_dge, directory_name = output_dir, add_name = paste0("_", direction, "_true_labels_all"))
 
 end_time <- Sys.time()
 cat("DGE analysis completed in", round(as.numeric(end_time - start_time, units = "hours"), 2), "hours\n")
@@ -154,11 +154,11 @@ cat("DGE analysis completed in", round(as.numeric(end_time - start_time, units =
 cat("Saving DGE analysis results...\n")
 
 for (cluster in names(res_dge$gprofiler_results)) {
-    ggsave(filename = file.path(figures_dir, paste0("pathway_cluster_", direction, "_", cluster, ".png")), 
+    ggsave(filename = file.path(figures_dir, paste0("pathway_cluster_", direction, "_", cluster, "_all.png")), 
            plot = plot_pathways(cluster, res_dge$gprofiler_results[[cluster]]), 
            width = 10, height = 8)
 }
 cat("Saved pathway plots for", length(names(res_dge$gprofiler_results)), "clusters\n")
 
 result_matrix <- get_pathway_scores_across_all_clusters(res = res_dge)
-heatmap_pathways(result_matrix = result_matrix, display_numbers = TRUE, directory_name = figures_dir, name = paste0("pathway_heatmap_", direction, "_known_tissues"))
+heatmap_pathways(result_matrix = result_matrix, display_numbers = TRUE, directory_name = figures_dir, name = paste0("pathway_heatmap_", direction, "_known_tissues_all"))

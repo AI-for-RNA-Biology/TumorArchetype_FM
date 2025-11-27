@@ -15,9 +15,8 @@ import seaborn as sns
 import anndata
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.embeddings.gene_embedding import GeneEmbedding
-from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
 from digitalhistopathology.benchmark.benchmark_base import BenchmarkBase
-from digitalhistopathology.benchmark.benchmark_utils import get_optimal_cluster_number_one_model
+from digitalhistopathology.benchmark.benchmark_utils import select_best_UMAP_and_kmeans_parameters    
 
 import matplotlib.pyplot as plt
 
@@ -43,7 +42,9 @@ class BenchmarkInvasive(BenchmarkBase):
                  min_cluster=4,
                  max_cluster=10,
                  cluster_step=1,
-                 dataset="HER2"):
+                 dataset="HER2", 
+                 fixed_n_clusters=None, 
+                 strategy_silhouette_then_batch_effect=True):
         
         super().__init__(path_to_pipeline=path_to_pipeline, 
                          pipelines_list=pipelines_list, 
@@ -60,8 +61,8 @@ class BenchmarkInvasive(BenchmarkBase):
         
         self.molecular_name = molecular_name
         self.algo = algo
-
-
+        self.strategy_silhouette_then_batch_effect = strategy_silhouette_then_batch_effect
+        
 
         if molecular_emb_path is not None:
             if molecular_emb_path.endswith('.h5ad'):
@@ -88,6 +89,11 @@ class BenchmarkInvasive(BenchmarkBase):
         self.min_cluster = min_cluster
         self.max_cluster = max_cluster
         self.cluster_step = cluster_step
+        
+        if fixed_n_clusters is not None:
+            self.fixed_n_clusters = fixed_n_clusters
+            self.min_cluster = fixed_n_clusters
+            self.max_cluster = fixed_n_clusters + 1
 
     
     def compare_invasive_patches_selection(self):
@@ -148,14 +154,18 @@ class BenchmarkInvasive(BenchmarkBase):
 
     
     def sub_invasive_cancer_clustering_pipeline(self,
-                                                file, 
                                                 model):
         
-        ## Retrieve the number of clusters
-        n_cluster = int(file.split("_clusters")[0].split("_")[-1])
+        range_clusters = np.arange(self.min_cluster, self.max_cluster, self.cluster_step)
+        
+        files = glob.glob(os.path.join(self.saving_folder, model, "scores_umap_across_parameters_*_clusters.json"))
+        
+        files = [file for file in files if int(file.split("_clusters")[0].split("_")[-1]) in range_clusters]
         
         ## Retrieve the best UMAP parameters
-        best_params = self.invasive_image_embeddings[model].select_best_umap_parameters(files=[file])
+        best_params = select_best_UMAP_and_kmeans_parameters(files=files,
+                                                             strategy_silhouette_then_batch_effect=self.strategy_silhouette_then_batch_effect)
+        n_cluster = best_params['n_clusters']
         
         ## Get the labels
         self.invasive_image_embeddings[model].emb.obs['predicted_label'] = best_params['labels']
@@ -172,7 +182,7 @@ class BenchmarkInvasive(BenchmarkBase):
         molecular_emb.emb = self.molecular_emb.emb.copy()
         molecular_emb.emb.obs['predicted_label'] = [labels.loc[idx, 'predicted_label'] if idx in labels.index else "not invasive" for idx in molecular_emb.emb.obs.index]
 
-
+        print(f"Molecular embedding shape: {molecular_emb.emb.X.shape}", flush=True)
         
         # if not 'umap' in molecular_emb.emb.obsm.keys():
         #     print("Computing UMAP for the molecular embedding...", flush=True)
@@ -180,9 +190,11 @@ class BenchmarkInvasive(BenchmarkBase):
         #                                        figures_folder=os.path.join(self.saving_folder, model))
             
         molecular_emb_labeled = GeneEmbedding(name=f"{self.molecular_name}_invasive_only")
+        
         molecular_emb_labeled.emb = molecular_emb.emb[~molecular_emb.emb.obs['predicted_label'].isna()]
         molecular_emb_labeled.emb = molecular_emb_labeled.emb[~(molecular_emb_labeled.emb.obs['predicted_label'] == 'not invasive')]
-        
+        print(f"Molecular embedding labeled shape: {molecular_emb_labeled.emb.X.shape}", flush=True)
+
         if not 'umap' in molecular_emb_labeled.emb.obsm.keys():
             print("Computing UMAP for the molecular embedding...", flush=True)
             molecular_emb_labeled.compute_umap(palette=self.dataset.PALETTE,
@@ -342,20 +354,20 @@ class BenchmarkInvasive(BenchmarkBase):
                 
                 df_w.to_csv(os.path.join(self.saving_folder, model, f"quantized_wasserstein_distance_molecular_{self.molecular_name}_{model}_{n_cluster}_clusters_patient_{patient}.csv"))
         
-        
+        return best_params
     
         
 
     def execute_pipeline(self):
         
-        range_clusters = np.arange(self.min_cluster, self.max_cluster, self.cluster_step)
+        
 
         self.saving_folder = os.path.join(self.saving_folder, self.algo)
         
         self.load_invasive_image_embeddings()
         self.initialize_model_saving_folders()
 
-
+        opti_clusters = {}
         for model in self.pipelines_list:
             print(f"Computing invasive cancer clustering for model {model}...", flush=True)
             print(self.invasive_image_embeddings[model].emb.X)
@@ -367,22 +379,50 @@ class BenchmarkInvasive(BenchmarkBase):
                                                   algo=self.algo,
                                                   model_name=model,
                                                   min_cluster=self.min_cluster,
-                                                  max_cluster=self.max_cluster)
+                                                  max_cluster=self.max_cluster,
+                                                  strategy_silhouette_then_batch_effect=self.strategy_silhouette_then_batch_effect)
             
-            files = glob.glob(os.path.join(self.saving_folder, model, "scores_umap_across_parameters_*_clusters.json"))
+            opti_clusters[model] = self.sub_invasive_cancer_clustering_pipeline(model)
             
-            files = [file for file in files if int(file.split("_clusters")[0].split("_")[-1]) in range_clusters]
+        # df_opti_clusters = pd.DataFrame(opti_clusters).T
+        # df_opti_clusters.to_csv(os.path.join(self.saving_folder, f"optimal_clusters.csv"))
+        # self.plot_diagnostic_clusters_plots(df_opti_clusters, self.saving_folder, extension=self.extension)
+        
             
-            opti_cluster_number = get_optimal_cluster_number_one_model(files)
-            opti_file = os.path.join(self.saving_folder, model, f"scores_umap_across_parameters_{opti_cluster_number}_clusters.json")
+    @staticmethod
+    def plot_diagnostic_clusters_plots(df_opti_clusters, saving_folder, extension='pdf', palette=None):
+        """
+        Plot diagnostic plots for the optimal clusters.
 
-            self.sub_invasive_cancer_clustering_pipeline(opti_file, model)
-
-    # @staticmethod
-    # def sub_invasive_cancer_clustering_pipeline_multiprocess(args):
-    #     benchmark_obj, file, model, ref_model = args
-    #     benchmark_obj.sub_invasive_cancer_clustering_pipeline(file, model, ref_model=ref_model)
-
+        Parameters:
+        df_opti_clusters (pd.DataFrame): DataFrame containing optimal cluster information.
+        saving_folder (str): Folder to save the plots.
+        extension (str): File extension for the saved plots.
+        """
+        plt.figure(figsize=(15, 6))
+        plt.subplot(1, 2, 1)
+        sns.lineplot(data=df_opti_clusters, x="n_clusters", y="silhouette_score", hue="name", palette=palette)
+        sns.scatterplot(data=df_opti_clusters, x="n_clusters", y="silhouette_score", hue="name", palette=palette, legend=False)
+        sns.despine()
+        plt.title("Silhouette scores for each model", weight='bold')
+        plt.legend(title="Model", loc='upper left', bbox_to_anchor=(1, 1))
+        plt.legend().remove()
+        plt.subplot(1, 2, 2)
+        df_opti_clusters["batch_effect_mitigation"] = 1 - df_opti_clusters["ARI_patient"]
+        sns.lineplot(data=df_opti_clusters, x="n_clusters", y="batch_effect_mitigation", hue="name", palette=palette)
+        sns.scatterplot(data=df_opti_clusters, x="n_clusters", y="batch_effect_mitigation", hue="name", palette=palette, legend=False)
+        sns.despine()
+        plt.title("Batch effect mitigation score for each model", weight='bold')
+        plt.legend(title="Model", loc='upper left', bbox_to_anchor=(1, 1))
+        plt.savefig(os.path.join(saving_folder, f"silhouette_and_batch_per_cluster.{extension}"), bbox_inches='tight')
+        
+        plt.figure(8,6)
+        sns.lineplot(data=df_opti_clusters, x="n_clusters", y="euclidian_dist_to_optimal", hue="name", palette=palette)
+        sns.scatterplot(data=df_opti_clusters, x="n_clusters", y="euclidian_dist_to_optimal", hue="name", palette=palette, legend=False)
+        sns.despine()
+        plt.title("euclidian_dist_to_optimal scores for each model", weight='bold')
+        plt.legend(title="Model", loc='upper left', bbox_to_anchor=(1, 1))
+        plt.savefig(os.path.join(saving_folder, f"optimal_dist_to_euclidean_per_cluster.{extension}"), bbox_inches='tight')
 
 
     @staticmethod
@@ -394,7 +434,8 @@ class BenchmarkInvasive(BenchmarkBase):
                                               min_cluster=3,
                                               max_cluster=10,
                                               svd_comp=5,
-                                              cluster_step=1):
+                                              cluster_step=1, 
+                                              strategy_silhouette_then_batch_effect=True):
 
         clustering_files = sorted(glob.glob(os.path.join(saving_folder, model_name, "*.json")))
 
@@ -446,8 +487,8 @@ class BenchmarkInvasive(BenchmarkBase):
                                                        saving_folder=os.path.join(saving_folder, model_name),
                                                        saving_ARI_patient=True)
                 
-        best_umap_params = image_embedding.select_best_umap_parameters(saving_folder = os.path.join(saving_folder, model_name),
-                                                            score='silhouette_score')
+        best_umap_params = select_best_UMAP_and_kmeans_parameters(saving_folder = os.path.join(saving_folder, model_name),
+                                                                  strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect)
         
 
 

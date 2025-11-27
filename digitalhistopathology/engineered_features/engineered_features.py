@@ -104,12 +104,12 @@ class EngineeredFeatures(ImageEmbedding):
 
         if self.result_saving_folder is not None:
             if not os.path.exists(self.result_saving_folder):
-                os.makedirs(self.result_saving_folder)
+                os.makedirs(self.result_saving_folder, exist_ok=True)
             
             self.save_path = os.path.join(self.result_saving_folder, self.dataset_name)
 
             if not os.path.exists(self.save_path):
-                os.makedirs(self.save_path)
+                os.makedirs(self.save_path, exist_ok=True)
                 
         else:
             self.save_path = None
@@ -414,14 +414,15 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                          "scn",
                          "ndpi",
                          "vms",
-                         "vmu"]:
+                         "vmu", 
+                         "qptiff"]:
             return path_to_wsi
         elif extension == 'jpg':
             image = pyvips.Image.new_from_file(path_to_wsi, access='sequential')
             path_new_tif = os.path.join(self.temporary_folder, self.dataset_name, "wsi", f"{filename}.tif")
 
             if not os.path.exists(os.path.dirname(path_new_tif)):
-                os.makedirs(os.path.dirname(path_new_tif))
+                os.makedirs(os.path.dirname(path_new_tif), exist_ok=True)
 
             image.tiffsave(path_new_tif,
                            compression="jpeg",

@@ -58,7 +58,9 @@ def benchmark(task,
               min_cluster=4,
               max_cluster=10,
               cluster_step=1,
-              dataset="HER2"):
+              dataset="HER2",
+              fixed_n_clusters=None,
+              strategy_silhouette_then_batch_effect=True):
         
     if task == 'shannon_entropy':
 
@@ -133,11 +135,20 @@ def benchmark(task,
                          min_cluster=min_cluster,
                          max_cluster=max_cluster,
                          cluster_step=cluster_step,
-                         dataset=dataset)
+                         dataset=dataset, 
+                         fixed_n_clusters=fixed_n_clusters,
+                         strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect)
     else:
         raise ValueError("Task not recognized. Please choose between 'shannon_entropy', 'unsupervised_clustering_ARI', 'regression', and 'invasive_cancer_clustering'.")
 
-    benchmark_obj.saving_folder = os.path.join(benchmark_obj.saving_folder, task)
+    if task != 'invasive_cancer_clustering':
+        benchmark_obj.saving_folder = os.path.join(benchmark_obj.saving_folder, task)
+    else:
+        inv_folder = "invasive_cancer_clustering"
+        if not strategy_silhouette_then_batch_effect:
+            inv_folder += "_strategy_silhouette_and_batch_effect"
+        benchmark_obj.saving_folder = os.path.join(benchmark_obj.saving_folder, inv_folder)
+            
     benchmark_obj.compute_image_embeddings()
     benchmark_obj.load_engineered_features()
 
@@ -180,6 +191,8 @@ def main():
     parser.add_argument('--min_cluster', type=int, default=4, help='Minimum number of clusters to use')
     parser.add_argument('--max_cluster', type=int, default=10, help='Maximum number of clusters to use')
     parser.add_argument('--cluster_step', type=int, default=1, help='Step size for clustering')
+    parser.add_argument('--fixed_n_clusters', type=int, default=None, help='If specified, use a fixed number of clusters for all models')
+    parser.add_argument('--no_strategy_silhouette_then_batch_effect', action="store_true", help='Disable silhouette then batch effect strategy for parameters selection in invasive cancer clustering')
     
 
     ## Plot colors
@@ -221,9 +234,14 @@ def main():
             args.min_cluster = config.get('min_cluster', 4)
             args.max_cluster = config.get('max_cluster', 10)
             args.cluster_step = config.get('cluster_step', 1)
+            args.fixed_n_clusters = config.get('fixed_n_clusters', None)
+            args.no_strategy_silhouette_then_batch_effect = not config.get('strategy_silhouette_then_batch_effect', True)
             
             
     sns.set_palette(a)
+    
+    # Convert the negative flag to positive variable
+    strategy_silhouette_then_batch_effect = not args.no_strategy_silhouette_then_batch_effect
 
     if args.benchmark_task == "all":
         # Run all benchmark tasks
@@ -255,6 +273,8 @@ def main():
                 max_cluster=args.max_cluster,
                 cluster_step=args.cluster_step,
                 dataset=args.dataset,
+                fixed_n_clusters=args.fixed_n_clusters,
+                strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect,
             )
     else:
         # Run the specified benchmark task
@@ -285,6 +305,8 @@ def main():
             max_cluster=args.max_cluster,
             cluster_step=args.cluster_step,
             dataset=args.dataset,
+            fixed_n_clusters=args.fixed_n_clusters,
+            strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect,
         )
 
 if __name__ == "__main__":

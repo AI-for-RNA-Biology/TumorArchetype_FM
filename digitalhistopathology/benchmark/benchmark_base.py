@@ -12,7 +12,7 @@ import anndata
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.engineered_features.engineered_features import EngineeredFeatures, scMTOP_EngineeredFeatures
 from digitalhistopathology.embeddings.embedding import Embedding
-from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset, VisiumHDdataset
 import glob
 
 class BenchmarkBase:
@@ -71,6 +71,8 @@ class BenchmarkBase:
             self.dataset = HER2Dataset()
         elif dataset == "TNBC":
             self.dataset = TNBCDataset()
+        elif dataset == "Ovarian":
+            self.dataset = VisiumHDdataset(name="Ovarian")
         else:
             raise ValueError(f"Dataset {dataset} not recognized. Please use 'HER2' or 'TNBC'.")
         

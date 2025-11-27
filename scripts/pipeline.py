@@ -26,7 +26,7 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 
 from digitalhistopathology.clustering.clustering_utils import clustering_boxplot_per_patient
-from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset, VisiumHDdataset
 from digitalhistopathology.datasets.spatial_dataset import MixedImageDataset, SpatialDataset
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.helpers import NumpyEncoder
@@ -166,13 +166,13 @@ class Pipeline:
 
         self.pipeline_settings_path = os.path.join(self.model_results_folder, "pipeline_settings.json")
 
-    def run(self):
+    def run(self, knn_relabeling):
 
         print("START running pipeline\n")
 
         self.load_and_save_whole_images_embeddings()
 
-        self.select_invasive_cancer_patches_pipeline(relabeling=False)
+        self.select_invasive_cancer_patches_pipeline(relabeling=knn_relabeling)
 
         self.shannon_entropy_pipeline()
 
@@ -253,6 +253,10 @@ class Pipeline:
             if self.dataset.name == "TNBC":
                 self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('_')[0])
 
+            if self.dataset.name == "Ovarian":
+                self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.replace('_', '-'))
+                self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('HUG-')[1])
+                self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('-')[0] if '-' in x else x)
             self.image_embedding.save_embeddings(saving_path=select_image_embedding_saving_path())
             print("Saving to {} ok".format(select_image_embedding_saving_path()))
         
@@ -268,13 +272,14 @@ class Pipeline:
                 print("Add label to image embedding", flush=True)
                 self.image_embedding.add_label(dataset=self.dataset.name)
                 
-        # if self.dataset.name == "TNBC":
-        #     self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('_')[0])
-        
-        # # Just for this round
-        # self.image_embedding.emb.obs.drop(['label'], axis=1, inplace=True)
-        # self.image_embedding.add_label(dataset=self.dataset.name)
-        # self.image_embedding.save_embeddings(saving_path=select_image_embedding_saving_path())
+
+            if self.dataset.name == "Ovarian":
+                self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.replace('_', '-'))
+                self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('HUG-')[1])
+                self.image_embedding.emb.obs['tumor'] = self.image_embedding.emb.obs['tumor'].apply(lambda x: x.split('-')[0] if '-' in x else x)
+            # # Just for this round
+
+            self.image_embedding.save_embeddings(saving_path=select_image_embedding_saving_path())
             
     def shannon_entropy_pipeline(self):
         """Compute the shannon entropy from denoised and non-denoised SVD on the whole image_embedding and separated by patient (shannon_entropy.json). Scree plots from the SVD on
@@ -537,6 +542,14 @@ def main():
         help="Pipeline results folder",
         type=str,
         )
+    parser.add_argument(
+        "--knn_relabeling",
+        "-kr",
+        default=False,
+        help="KNN relabeling",
+        type=bool,
+        )
+
 
     args = parser.parse_args()
     if not args.pipeline_name:
@@ -546,13 +559,21 @@ def main():
 
     model_name = args.model_name.lower()
     model = load_model(model_name, args.retrained_model_path)
-    dataset = (
-        TNBCDataset(patches_folder=args.patches_folder)
-        if args.dataset == "TNBC"
-        else HER2Dataset(
+
+    if args.dataset == "TNBC":
+        dataset = TNBCDataset(patches_folder=args.patches_folder)
+    elif args.dataset == "HER2":
+        dataset = HER2Dataset(
             patches_folder=args.patches_folder,
         )
-    )
+
+    else:
+        dataset = VisiumHDdataset(
+            patches_folder=args.patches_folder,
+            name=args.dataset
+        )
+
+
 
     # Get rid of patient A (outlier)
     if dataset is HER2Dataset:
@@ -581,7 +602,7 @@ def main():
         svd_components_number_shannon_entropy=SVD_COMPONENT_NUMBER,  # to be fixed to the smallest number of deep features across all the tested models
     )
 
-    pipeline.run()
+    pipeline.run(knn_relabeling=args.knn_relabeling)
 
 SVD_COMPONENT_NUMBER = 512
 if __name__ == "__main__":

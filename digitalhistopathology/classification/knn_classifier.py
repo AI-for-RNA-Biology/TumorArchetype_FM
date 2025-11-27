@@ -180,7 +180,7 @@ class Classification_knn(DimRed):
             print("Shape of the data: {}".format(current_emb.emb.shape))
 
             filtered_data = current_emb.emb[
-                (~current_emb.emb.obs["label"].isna()) & (current_emb.emb.obs["label"] != "undetermined")
+                (~current_emb.emb.obs["label"].isna()) & (current_emb.emb.obs["label"] != "undetermined") & (current_emb.emb.obs["label"] != "nan")
             ]
 
             print("Shape of the filtered data: {}".format(filtered_data.shape))
@@ -236,7 +236,7 @@ class Classification_knn(DimRed):
                     ] = label_pred
             else:
                 emb_predict = current_emb.emb[
-                    current_emb.emb.obs["label"].isna() | (current_emb.emb.obs["label"] == "undetermined")
+                    current_emb.emb.obs["label"].isna() | (current_emb.emb.obs["label"] == "undetermined") | (current_emb.emb.obs["label"] == "nan")
                 ]
                 print("Shape of the data to predict: {}".format(emb_predict.shape))
                 if svd_comp is None:

@@ -121,7 +121,13 @@ opti_clusters <- read.csv(path_opti_clusters)
 
 # Extract number of clusters for the current model
 # Assuming the first column contains the model names
-n <- opti_clusters$n_clusters[opti_clusters[[1]] == model]
+if (length(args) >= 2) {
+  n <- args[2]
+  cat("Using user-specified n:", n, "\n")
+} else {
+  n <- opti_clusters$n_clusters[opti_clusters[[1]] == model]
+  cat("Using optimal n from file:", n, "\n")
+}
 
 # Directory to search for label files
 label_dir <- fs::path(folder, "invasive_cancer_clustering", 
@@ -141,10 +147,7 @@ if (length(path_labels) > 1) {
 file <- path_labels[1]
 
 # Load true labels DGE results
-res_true_labels <- load_dge_pathways_analysis_per_clusters(directory_name = here("results", "TNBC", "molecular", "tissue_DGE"), add_name = "_upregulated_true_labels")
-
-# Get number of clusters from filename
-n <- gsub(".*labels_(\\d+)_clusters.*", "\\1", file)
+res_true_labels <- load_dge_pathways_analysis_per_clusters(directory_name = here("results", "TNBC", "molecular", "tissue_DGE"), add_name = "_upregulated_true_labels_all")
 
 # Get pathways heatmaps for upregulated pathways
-results_upregulated <- get_pathways_heatmaps(labels_clusters_uni_file = file, seurat_object = seurat_object, res_true_labels = res_true_labels, upregulated = TRUE, add_name = paste0("_", n, "_clusters"))
+results_upregulated <- get_pathways_heatmaps(labels_clusters_uni_file = file, seurat_object = seurat_object, res_true_labels = res_true_labels, upregulated = TRUE, add_name = paste0("_", n, "_clusters_all"))

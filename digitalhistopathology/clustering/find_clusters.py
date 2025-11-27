@@ -506,12 +506,19 @@ class FindClusters(DimRed):
         from digitalhistopathology.embeddings.embedding import Embedding
 
         n_labels = len(set(labels))
-        for i in range(100):
-            patients = np.random.choice(unique_patients, size=n_labels, replace=False)
-            subset = df_labels[df_labels['tumor'].isin(patients)]
-            ARI_patient = adjusted_rand_score(subset['tumor'], subset['labels'])
-            boostraped_ARI_patients.append(ARI_patient)
-            return np.mean(boostraped_ARI_patients)
+        # Acceptable range of ARI computation without bootstrapping
+        # If there are less than 3 patients than n_labels or less 3 n_labels than patients, 
+        # we compute directly the ARI.
+        if abs(len(unique_patients) - n_labels) <= 3:
+            ARI_patient = adjusted_rand_score(df_labels['tumor'], df_labels['labels'])
+            return ARI_patient
+        else:
+            for i in range(100):
+                patients = np.random.choice(unique_patients, size=n_labels, replace=False)
+                subset = df_labels[df_labels['tumor'].isin(patients)]
+                ARI_patient = adjusted_rand_score(subset['tumor'], subset['labels'])
+                boostraped_ARI_patients.append(ARI_patient)
+                return np.mean(boostraped_ARI_patients)
 
             
     def clustering_across_umap_parameters(
@@ -608,7 +615,8 @@ class FindClusters(DimRed):
                         'samples': results['samples']}
         
         return best_params
-            
+    
+
 
     def get_all_unsupervised_clustering_score_df(self, all_svd=True):
         """Compute a dataframe from the unsupervised_clustering_score_files with one line for each experiment.

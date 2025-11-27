@@ -517,7 +517,7 @@ class BenchmarkClustering(BenchmarkBase):
                         sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
                                         y=subset_emb.emb.obsm['umap'][:,1],
                                         hue=subset_emb.emb.obs['label'],
-                                        palette=HER2Dataset.PALETTE, 
+                                        palette=self.dataset.PALETTE, 
                                         s=10)   
                         plt.title(f"{model}", weight='bold')
                         sns.despine()
@@ -683,7 +683,7 @@ class BenchmarkClustering(BenchmarkBase):
                 
                 aris_patient['handcrafted_features'] = adjusted_rand_score(self.ef.emb.obs[self.group], self.ef.emb.obs['predicted_label'])
                 
-                with open(os.path.join(self.saving_folder, f'ARI_patient_{model}.json'), 'w') as f:
+                with open(os.path.join(self.saving_folder, f'ARI_patient_handcrafted_features.json'), 'w') as f:
                     json.dump({'handcrafted_features': aris_patient['handcrafted_features']}, f)   
 
         with open(os.path.join(self.saving_folder, 'ARI_patient.json'), 'w') as f:
@@ -817,33 +817,34 @@ class BenchmarkClustering(BenchmarkBase):
         # Visualization UMAP-kmeans per slide
         self.set_best_UMAP_per_slide()
         # self.UMAP_best_params_clustering_visualization_per_slide()
-        self.plot_slides_with_clusters(obsm='umap')
+        # self.plot_slides_with_clusters(obsm='umap')
 
 
         
         self.set_best_UMAP_overall()
 
-        self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', palette='Set3')
-        self.UMAP_best_params_clustering_visualization_overall(hue='tumor', palette='Accent')
-        self.UMAP_best_params_clustering_visualization_overall(hue='name_origin')
+        # self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', palette='Set3')
+        # self.UMAP_best_params_clustering_visualization_overall(hue='tumor', palette='Accent')
+        # self.UMAP_best_params_clustering_visualization_overall(hue='name_origin')
 
         palette_with_nans = self.dataset.PALETTE.copy()
         palette_with_nans['nan'] = 'black'
-        self.UMAP_best_params_clustering_visualization_overall(hue='label', palette=palette_with_nans)
+        # self.UMAP_best_params_clustering_visualization_overall(hue='label', palette=palette_with_nans)
 
-        # Visiualization UMAP k-means on annotated slides only
-        self.set_best_UMAP_overall(annotated_only=True)
-        self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', annotated_only=True, palette='Set3')
-        self.UMAP_best_params_clustering_visualization_overall(hue='tumor', annotated_only=True, palette='Accent')
-        self.UMAP_best_params_clustering_visualization_overall(hue='name_origin', annotated_only=True, palette='Accent')
-        self.UMAP_best_params_clustering_visualization_overall(hue='label', annotated_only=True, palette=HER2Dataset.PALETTE)
-        
         # Visualization UMAP k-means overall all slides
         n_patients = self.image_embeddings[self.pipelines_list[0]].emb.obs[self.group].nunique()
         if n_patients <= 10:
             ari_patients = self.compute_umap_ARI_patient_for_batch_control()
         else:
             self.UMAP_best_params_clustering_many_patients_batch(annotated_only=False, palette='Set3', n_patients=10)
+
+        # Visiualization UMAP k-means on annotated slides only
+        self.set_best_UMAP_overall(annotated_only=True)
+        self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', annotated_only=True, palette='Set3')
+        self.UMAP_best_params_clustering_visualization_overall(hue='tumor', annotated_only=True, palette='Accent')
+        self.UMAP_best_params_clustering_visualization_overall(hue='name_origin', annotated_only=True, palette='Accent')
+        self.UMAP_best_params_clustering_visualization_overall(hue='label', annotated_only=True, palette=self.dataset.PALETTE)
+        
 
         # Plot ARI scores
         plt.figure()
@@ -908,7 +909,7 @@ class BenchmarkClustering(BenchmarkBase):
                         subset_without_nans.compare_two_labels_plot(sample_name=slide,
                                                             label_obs_name1="label", 
                                                             label_obs_name2="predicted_label",
-                                                            palette_1=HER2Dataset.PALETTE,
+                                                            palette_1=self.dataset.PALETTE,
                                                             )
                         
 

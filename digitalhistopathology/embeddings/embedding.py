@@ -213,7 +213,7 @@ class Embedding(Classification, Clustering, SpatialViz):
                 )
             )
             
-        elif dataset == 'TNBC':
+        elif dataset == 'TNBC' or dataset == 'Ovarian':
             
             all_labels_df = []
             for file in self.label_files:
@@ -223,19 +223,13 @@ class Embedding(Classification, Clustering, SpatialViz):
                 
             label_file = pd.concat(all_labels_df, axis=0)
                 
-            # ids_common = set(label_file.index).intersection(set(self.emb.obs.index))
-            
-            # Filter the image embedding accordingly
-            # self.emb = self.emb[self.emb.obs.index.isin(ids_common)]
-            
-            # Merge the label file with the image embedding
-            # self.emb.obs = self.emb.obs.merge(label_file, left_index=True, right_index=True)
+
             self.emb.obs = self.emb.obs.merge(label_file, left_index=True, right_index=True, how="left")
 
             
             self.emb.obs.replace("undetermined", np.nan, inplace=True)
             
-            print(f"Added TNBC labels to {len(self.emb.obs)} patches. Patches with no label were set to NaNs.")
+            print(f"Added {dataset} labels to {len(self.emb.obs)} patches. Patches with no label were set to NaNs.")
         else:
             raise Exception("Dataset not supported for label addition.")   
 

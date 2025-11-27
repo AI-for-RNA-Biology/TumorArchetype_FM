@@ -20,6 +20,8 @@ import anndata as ad
 import numpy as np
 from scipy.sparse import csr_matrix
 from genomemanager.gtf_utils import read_gtf
+import scipy.sparse as sp
+    
 
 
 def load_spaceranger_coding_genes(visium_output_dir, 
@@ -249,3 +251,146 @@ def aggregate_spots_to_resolution(adata, current_resolution_um, target_resolutio
         print(f"  Mean genes per spot: {adata_aggregated.obs['n_genes'].mean():.1f}")
     
     return adata_aggregated
+
+
+
+def assign_barcodes_to_patches_fast(df_patches, adata_small_spots, margin):
+    """
+    Fast assignment of barcodes to patches.
+    Strategy:
+    - sort spots by row once (O(n log n))
+    - for each patch binary-search the row range (O(log n))
+    - then filter only the small slice by columns (fast)
+    Returns a dict mapping patch name -> numpy array of barcodes.
+    """
+    spot_rows = adata_small_spots.obs['pxl_row_in_fullres'].to_numpy()
+    spot_cols = adata_small_spots.obs['pxl_col_in_fullres'].to_numpy()
+    barcodes = adata_small_spots.obs['barcode'].to_numpy()
+
+    # sort by row coordinate once
+    order = np.argsort(spot_rows)
+    rows_sorted = spot_rows[order]
+    cols_sorted = spot_cols[order]
+    bar_sorted = barcodes[order]
+
+    result = {}
+
+    for idx, patch in df_patches.iterrows():
+        row_min = patch['start_height_origin'] + margin
+        row_max = patch['start_height_origin'] + patch['shape_pixel'] - margin
+        col_min = patch['start_width_origin'] + margin
+        col_max = patch['start_width_origin'] + patch['shape_pixel'] - margin
+
+        # locate row slice with binary search
+        i0 = np.searchsorted(rows_sorted, row_min, side='left')
+        i1 = np.searchsorted(rows_sorted, row_max, side='right')
+
+        if i0 >= i1:
+            result[patch['name']] = np.array([], dtype=bar_sorted.dtype)
+            continue
+
+        # filter the small slice by columns
+        cols_slice = cols_sorted[i0:i1]
+        mask = (cols_slice >= col_min) & (cols_slice <= col_max)
+        result[patch['name']] = bar_sorted[i0:i1][mask]
+
+    return result
+
+
+def create_pseudobulk_for_patches_from_smaller_bins(adata_source, df_patches, save_path=None):
+    """
+    Create pseudobulk AnnData from spatial transcriptomics data by aggregating spots within patches.
+    
+    Parameters
+    ----------
+    adata_source : AnnData
+        Source AnnData object with spatial transcriptomics data (spots x genes).
+        Must have either 'barcode' column in obs or barcodes as obs_names.
+    df_patches : pd.DataFrame
+        DataFrame with patch information. Must contain:
+        - 'name': patch names
+        - 'barcodes': iterable of barcode lists for each patch
+        Other columns will be preserved in the output obs.
+    save_path : str, optional
+        If provided, save the resulting AnnData to this path.
+        
+    Returns
+    -------
+    adata_pseudobulk : AnnData
+        Pseudobulk AnnData object (patches x genes) with:
+        - X: sparse matrix with summed expression per patch
+        - obs: patch metadata from df_patches
+        - var: gene metadata from adata_source
+        - uns: metadata about pseudobulk creation
+    """
+
+    # 1) Build mapping barcode -> obs index in adata
+    if 'barcode' in adata_source.obs.columns:
+        source_barcodes = adata_source.obs['barcode'].astype(str).to_numpy()
+    else:
+        source_barcodes = adata_source.obs_names.astype(str)
+    
+    barcode_to_idx = {b: i for i, b in enumerate(source_barcodes)}
+    
+    n_genes = adata_source.n_vars
+    dtype = getattr(adata_source.X, 'dtype', None) or np.float32
+    
+    rows = []          # will hold 1xG sparse rows (csr)
+    valid_patch_names = []  # keep track of patch names aligned to rows
+    
+    for patch_name, barcodes in zip(df_patches['name'], df_patches['barcodes']):
+        # barcodes may be numpy array / list / empty; ensure strings
+        if barcodes is None or len(barcodes) == 0:
+            # empty row
+            rows.append(sp.csr_matrix((1, n_genes), dtype=dtype))
+            valid_patch_names.append(patch_name)
+            continue
+        
+        # map to indices (skip barcodes not found)
+        idxs = [barcode_to_idx[b] for b in map(str, barcodes) if b in barcode_to_idx]
+        if len(idxs) == 0:
+            rows.append(sp.csr_matrix((1, n_genes), dtype=dtype))
+            valid_patch_names.append(patch_name)
+            continue
+        
+        # subset the AnnData X for these obs indices
+        subX = adata_source.X[idxs]
+        # compute pseudobulk sum over axis=0
+        # handle sparse/dense
+        if sp.issparse(subX):
+            summed = subX.sum(axis=0)            # returns 1 x n_genes (sparse matrix or numpy.matrix)
+            summed = sp.csr_matrix(summed)       # ensure csr 1xG
+        else:
+            # dense numpy array
+            summed = np.asarray(subX).sum(axis=0, keepdims=True)
+            summed = sp.csr_matrix(summed)
+        # ensure 1 x n_genes shape
+        if summed.shape[1] != n_genes:
+            summed = summed.reshape(1, n_genes)
+        rows.append(summed)
+        valid_patch_names.append(patch_name)
+    
+    # 2) Stack rows to form (n_patches x n_genes) sparse matrix
+    if len(rows) == 0:
+        raise ValueError("No patches found in df_patches['barcodes'].")
+    pseudobulk_X = sp.vstack(rows).tocsr()
+    
+    # 3) Build AnnData: obs <- df_patches (keep metadata), var <- adata_source.var
+    obs = df_patches.copy()
+    # set index to patch name for clarity
+    obs = obs.set_index('name', drop=False).loc[valid_patch_names]
+    
+    # create AnnData
+    adata_pseudobulk = ad.AnnData(X=pseudobulk_X, obs=obs, var=adata_source.var.copy())
+    
+    # 4) Store source info
+    adata_pseudobulk.uns['pseudobulk_from'] = 'spatial_transcriptomics'
+    adata_pseudobulk.uns['n_original_spots'] = int(adata_source.n_obs)
+    adata_pseudobulk.uns['n_patches'] = len(valid_patch_names)
+    
+    # 5) Save to disk if desired
+    if save_path is not None:
+        adata_pseudobulk.write_h5ad(save_path)
+        print(f"Saved pseudobulk AnnData to {save_path}")
+    
+    return adata_pseudobulk
