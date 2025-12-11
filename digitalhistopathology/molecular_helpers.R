@@ -171,18 +171,37 @@ format_seurat_with_predicted_csv <- function(seurat_object, path_to_predicted_cl
   predicted_clusters_uni_metadata <- predicted_clusters_uni_metadata %>% select(-label)
   rownames(predicted_clusters_uni_metadata) <- gsub("_", "-", rownames(predicted_clusters_uni_metadata))
   
+  cat("Predicted clusters rows:", nrow(predicted_clusters_uni_metadata), "\n")
+  cat("Sample predicted rownames:", head(rownames(predicted_clusters_uni_metadata), 3), "\n")
+  cat("Predicted columns:", colnames(predicted_clusters_uni_metadata), "\n")
+  
   predicted_clusters_uni_metadata <- predicted_clusters_uni_metadata %>% rownames_to_column(var = "rowname")
-  
-  
+
+
+  rownames(seurat_object@meta.data) <- gsub("_", "-", rownames(seurat_object@meta.data))
   meta_data <- seurat_object@meta.data %>%
     rownames_to_column(var = "rowname")
   
+  cat("Seurat metadata rows:", nrow(meta_data), "\n")
+  cat("Sample seurat rownames:", head(meta_data$rowname, 3), "\n")
+  
   merged_meta_data <- merge(predicted_clusters_uni_metadata, meta_data, by = "rowname")
+  cat("Merged metadata rows:", nrow(merged_meta_data), "\n")
+  cat("Merged columns:", colnames(merged_meta_data), "\n")
+  cat("predicted_label summary:", summary(merged_meta_data$predicted_label), "\n")
+  
   rownames(merged_meta_data) <- merged_meta_data$rowname
   merged_meta_data <- merged_meta_data %>% select(-rowname)
   
-  seurat_object_predicted <- seurat_object[ , rownames(merged_meta_data)]
+  # Subset using the subset function instead of [ operator
+  seurat_object_predicted <- subset(seurat_object, cells = rownames(merged_meta_data))
   seurat_object_predicted@meta.data <- merged_meta_data
+  
+  # Check if predicted_label exists
+  if (!"predicted_label" %in% colnames(seurat_object_predicted@meta.data)) {
+    stop("Error: predicted_label column not found in metadata after merge")
+  }
+  
   # Set the identities in the Seurat object to your custom labels
   Idents(seurat_object_predicted) <- seurat_object_predicted@meta.data$predicted_label
   
@@ -192,13 +211,18 @@ format_seurat_with_predicted_csv <- function(seurat_object, path_to_predicted_cl
 
 get_clusters_DGE_BPs <- function(seurat_object, upregulated = TRUE){
 
-  
+  unique_patients <- unique(seurat_object$patient)
   # Use FindAllMarkers to find markers for each cluster
-  if (upregulated == TRUE){
-    markers <- FindAllMarkers(seurat_object, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, latent.vars = "patient", test.use='MAST')
+
+  if (length(unique_patients) > 1){
+    cat("Finding upregulated markers with patient as latent variable...\n")
+      markers <- FindAllMarkers(seurat_object, only.pos = upregulated, min.pct = 0.25, logfc.threshold = 0.25, latent.vars = "patient", test.use='MAST')
+
   } else {
-    markers <- FindAllMarkers(seurat_object, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.25, latent.vars = "patient", test.use='MAST')
+    cat("Finding upregulated markers without latent variable (only one patient)...\n")
+    markers <- FindAllMarkers(seurat_object, only.pos = upregulated, min.pct = 0.25, logfc.threshold = 0.25, test.use='MAST')
   }
+
   
   
   # Print the top markers
@@ -223,10 +247,11 @@ get_clusters_DGE_BPs <- function(seurat_object, upregulated = TRUE){
     # Run g:Profiler for the current cluster
     gp_result <- gost(query = cluster_genes, organism = "hsapiens", correction_method = "g_SCS", sources='GO:BP')
     
-    # Select top 10 pathways based on p-value 
+    # Select all pathways based on p-value 
     if (length(gp_result) > 0) {
-      specific_terms <- gp_result$result %>% dplyr::filter(term_size < 300) %>% dplyr::filter(intersection_size > 5)  %>% arrange(p_value) %>% slice_head(n = 10) 
-      
+      # specific_terms <- gp_result$result %>% dplyr::filter(term_size < 300) %>% dplyr::filter(intersection_size > 5)  %>% arrange(p_value) %>% slice_head(n = 30) 
+      specific_terms <- gp_result$result %>% dplyr::filter(term_size < 300) %>% dplyr::filter(intersection_size > 5)  %>% arrange(p_value) %>% slice_head(n = 30) 
+
       gprofiler_results[[cluster]] <- specific_terms
       
       # Store the results
@@ -247,7 +272,7 @@ plot_pathways <- function(cluster, results) {
 
 
 save_dge_pathways_analysis_per_clusters <- function(res, directory_name, add_name = ""){
-  write.csv(res$markers, file = paste0(directory_name, "/", "marker_genes.csv"))
+  write.csv(res$markers, file = paste0(directory_name, "/", "marker_genes", add_name, ".csv"))
   
   res$gprofiler_results <- lapply(res$gprofiler_results, function(df) {
     if (length(df) > 0) {
@@ -265,4 +290,102 @@ save_dge_pathways_analysis_per_clusters <- function(res, directory_name, add_nam
   lapply(names(res$gprofiler_results), function(name) {
     write.csv(res$gprofiler_results[[name]], file = paste0(directory_name, "/", "pathways_results_cluster_", name, add_name, ".csv"), row.names = FALSE)
   })
+}
+
+load_dge_pathways_analysis_per_clusters <- function(directory_name, add_name = ""){
+  # Load marker genes
+  markers_file <- paste0(directory_name, "/", "marker_genes", add_name, ".csv")
+  if (!file.exists(markers_file)) {
+    stop("Marker genes file not found: ", markers_file)
+  }
+  markers <- read.csv(markers_file, row.names = 1)
+  
+  # Find all pathway results files
+  pathway_files <- list.files(directory_name, 
+                              pattern = paste0("^pathways_results_cluster_.*", add_name, "\\.csv$"), 
+                              full.names = TRUE)
+  
+  if (length(pathway_files) == 0) {
+    warning("No pathway results files found in: ", directory_name)
+    return(list(markers = markers, gprofiler_results = list()))
+  }
+  
+  # Initialize gprofiler_results list
+  gprofiler_results <- list()
+  
+  # Load each pathway results file
+  for (file in pathway_files) {
+    # Extract cluster name from filename
+    basename_file <- basename(file)
+    cluster_name <- gsub(paste0("^pathways_results_cluster_(.*)_?", add_name, "\\.csv$"), "\\1", basename_file)
+    cluster_name <- gsub("_$", "", cluster_name)  # Remove trailing underscore if present
+    
+    # Read the CSV file
+    pathway_data <- read.csv(file, stringsAsFactors = FALSE)
+    
+    # Convert parents column back to list format if it exists
+    if ("parents" %in% colnames(pathway_data)) {
+      pathway_data$parents <- lapply(pathway_data$parents, function(x) {
+        if (is.na(x) || x == "") {
+          return(character(0))
+        } else {
+          return(strsplit(x, ";")[[1]])
+        }
+      })
+    }
+    
+    # Store in the results list
+    gprofiler_results[[cluster_name]] <- pathway_data
+  }
+  
+  return(list(markers = markers, gprofiler_results = gprofiler_results))
+}
+
+get_pathways_heatmaps <- function(labels_clusters_uni_file, seurat_object, res_true_labels, upregulated = TRUE, add_name = "") {
+  directory_name <- dirname(labels_clusters_uni_file)
+  
+  if (upregulated == TRUE){
+    name = paste0("upregulated", add_name)
+  } else {
+    name = paste0("downregulated", add_name)
+  }
+  
+  # Define file paths
+  file_with_true_labels <- paste0(directory_name, "/", name, "_result_matrix_with_true_labels.csv")
+  file_no_labels <- paste0(directory_name, "/", name, "_result_matrix_no_labels.csv")
+  
+  # Check if files already exist
+  if (file.exists(file_with_true_labels) && file.exists(file_no_labels)) {
+    result_matrix_true_labels <- read.csv(file_with_true_labels, row.names = 1)
+    print(paste0("Loaded result_matrix_true_labels from ", file_with_true_labels))
+    result_matrix <- read.csv(file_no_labels, row.names = 1)
+    print(paste0("Loaded result_matrix from ", file_no_labels))
+  } else {
+    seurat_object_predicted <- format_seurat_with_predicted_csv(seurat_object = seurat_object, path_to_predicted_clusters = labels_clusters_uni_file)
+    # Upregulated pathways
+    res <- get_clusters_DGE_BPs(seurat_object = seurat_object_predicted, upregulated = upregulated)
+    
+    save_dge_pathways_analysis_per_clusters(res = res, directory_name = directory_name, add_name = add_name)
+    # With true labels
+    result_matrix_true_labels <- get_pathway_scores_across_all_clusters(res = res, res_true_labels = res_true_labels)
+    # Without numbers
+    heatmap_pathways(result_matrix_true_labels, display_numbers = FALSE, directory_name = directory_name, name = paste0("_", name, "_with_true_labels"))
+    # With numbers
+    heatmap_pathways(result_matrix_true_labels, display_numbers = TRUE, directory_name = directory_name, name = paste0("_", name, "_with_true_labels_with_numbers"))
+    
+    # Without true labels
+    result_matrix <- get_pathway_scores_across_all_clusters(res = res)
+    # Without numbers
+    heatmap_pathways(result_matrix, display_numbers = FALSE, directory_name = directory_name, name = paste0("_", name, "_no_labels"))
+    # With numbers
+    heatmap_pathways(result_matrix, display_numbers = TRUE, directory_name = directory_name, name = paste0("_", name, "_no_labels_with_numbers"))
+    
+    # Save results to CSV
+    write.csv(result_matrix_true_labels, file = file_with_true_labels)
+    print(paste0("Saved result_matrix_true_labels to ", file_with_true_labels))
+    write.csv(result_matrix, file = file_no_labels)
+    print(paste0("Saved result_matrix to ", file_no_labels))
+  }
+  
+  return(list(result_matrix_true_labels = result_matrix_true_labels, result_matrix = result_matrix))
 }

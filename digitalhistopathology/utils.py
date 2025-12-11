@@ -7,7 +7,9 @@
 #
 import scipy
 import numpy as np
+import torch
 from sklearn.cluster import KMeans
+from digitalhistopathology.clustering.kmeans_gpu import KMeans_gpu
 import ot
 from scipy.spatial.distance import pdist, squareform, mahalanobis
 
@@ -49,20 +51,24 @@ def quantized_wasserstein(matrix, idx_samples_cluster1, idx_samples_cluster2, re
         # Normalize the matrix (elongation or dilatation of the current space)
         matrix = matrix * current_diameter / ref_diameter
     
-    matrix1 = matrix[idx_samples_cluster1,:]
-    matrix2 = matrix[idx_samples_cluster2,:]
+    matrix1 = matrix[idx_samples_cluster1, :]
+    matrix2 = matrix[idx_samples_cluster2, :]
     
     k = min(k, len(matrix1), len(matrix2))
-    
-    kmeans1 = KMeans(n_clusters=k)
-    labels1 = kmeans1.fit_predict(matrix1)   
-    
-    kmeans2 = KMeans(n_clusters=k) 
-    labels2 = kmeans2.fit_predict(matrix2)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    matrix1_t = torch.as_tensor(matrix1, device=device, dtype=torch.float32)
+    matrix2_t = torch.as_tensor(matrix2, device=device, dtype=torch.float32)
+
+    kmeans1 = KMeans_gpu(n_clusters=k)
+    labels1 = kmeans1.fit_predict(matrix1_t).detach().cpu().numpy()
+
+    kmeans2 = KMeans_gpu(n_clusters=k)
+    labels2 = kmeans2.fit_predict(matrix2_t).detach().cpu().numpy()
     
     # Compute the cluster centroids
-    centroids1 = kmeans1.cluster_centers_
-    centroids2 = kmeans2.cluster_centers_
+    centroids1 = kmeans1.cluster_centers_.detach().cpu().numpy()
+    centroids2 = kmeans2.cluster_centers_.detach().cpu().numpy()
     
     # Compute the mass of each cluster
 
@@ -82,7 +88,12 @@ def quantized_wasserstein(matrix, idx_samples_cluster1, idx_samples_cluster2, re
     cost_matrix = ot.dist(centroids1, centroids2, metric='sqeuclidean')
 
     # Calculate the Wasserstein distance
-    wasserstein_distance = ot.emd2(masses1, masses2, cost_matrix)
+    print(f"Shapes for input into wasserstein distance computation: masses1: {masses1.shape}, masses2: {masses2.shape}, cost: {cost_matrix.shape}")
+    try:
+        wasserstein_distance = ot.emd2(masses1, masses2, cost_matrix)
+    except:
+        print("Error in computing Wasserstein distance. Returning NaN.")
+        wasserstein_distance = np.nan
     print(f"Wasserstein distance: {wasserstein_distance}")
     
     return wasserstein_distance

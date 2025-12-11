@@ -31,9 +31,10 @@ class BenchmarkShannon(BenchmarkBase):
                  engineered_features_type='scMTOP',
                  extension='png',
                  group='tumor',
-                 label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
                  min_comp=512,
                  pct_variance=0.9,
+                 dataset="HER2",
+
                  ):
         
         super().__init__(path_to_pipeline=path_to_pipeline, 
@@ -47,7 +48,7 @@ class BenchmarkShannon(BenchmarkBase):
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files)
+                         dataset=dataset)
         
         self.min_comp = min_comp  # Minimum number of components to keep for the SVD
         self.pct_variance = pct_variance  # Percentage of variance to keep for the SVD
@@ -100,8 +101,9 @@ class BenchmarkShannon(BenchmarkBase):
                 kl_divergence_models[model] = self.image_embeddings[model].get_kl_divergence_per_group(group=group, denoised=denoised, n_comp=n_comp, pct=pct)
 
             # Add handcrafted features
-            entropy_models['handcrafted'] = self.ef.get_shannon_entropy_per_group(group=group, denoised=denoised, n_comp=n_comp, rescale=rescale, pct=pct)
-            kl_divergence_models['handcrafted'] = self.ef.get_kl_divergence_per_group(group=group, denoised=denoised, n_comp=n_comp, pct=pct)
+            if self.ef is not None:
+                entropy_models['handcrafted'] = self.ef.get_shannon_entropy_per_group(group=group, denoised=denoised, n_comp=n_comp, rescale=rescale, pct=pct)
+                kl_divergence_models['handcrafted'] = self.ef.get_kl_divergence_per_group(group=group, denoised=denoised, n_comp=n_comp, pct=pct)
             
             print(f"Entropy models: {entropy_models}")
             ## Boxlots
@@ -154,8 +156,9 @@ class BenchmarkShannon(BenchmarkBase):
                 kl_divergences[model] = self.image_embeddings[model].get_kl_divergence(denoised=denoised, n_comp=n_comp, pct=pct)
 
             # Add handcrafted features
-            entropies['handcrafted'] = self.ef.get_shannon_entropy(denoised=denoised, n_comp=n_comp, rescale=rescale, pct=pct)
-            kl_divergences['handcrafted'] = self.ef.get_kl_divergence(denoised=denoised, n_comp=n_comp, pct=pct)
+            if self.ef is not None:
+                entropies['handcrafted'] = self.ef.get_shannon_entropy(denoised=denoised, n_comp=n_comp, rescale=rescale, pct=pct)
+                kl_divergences['handcrafted'] = self.ef.get_kl_divergence(denoised=denoised, n_comp=n_comp, pct=pct)
             
             for dict_, name in zip([entropies, kl_divergences], ['shannon_entropy', 'kl_divergence']):
                 plt.figure(figsize=(2*len(self.pipelines_list), 5))

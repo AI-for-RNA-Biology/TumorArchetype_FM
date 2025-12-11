@@ -48,11 +48,12 @@ class BenchmarkRegression(BenchmarkBase):
                  engineered_features_type='scMTOP',
                  extension='png',
                  group='tumor',
-                 label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
                  regression_type="linear",
                  n_splits=5,
                  alpha_reg=1,
-                 on_invasive=False):        
+                 on_invasive=False,
+                 dataset="HER2",
+):        
         
         super().__init__(path_to_pipeline=path_to_pipeline, 
                          pipelines_list=pipelines_list, 
@@ -65,7 +66,7 @@ class BenchmarkRegression(BenchmarkBase):
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files)
+                         dataset=dataset)
         
         self.regression_type = regression_type
         self.n_splits = n_splits

@@ -12,6 +12,7 @@ import anndata as ad
 import matplotlib
 import numpy as np
 import pandas as pd
+
 import torch
 
 matplotlib.rcParams["pdf.fonttype"] = 42
@@ -27,10 +28,10 @@ from digitalhistopathology.embeddings.embedding import Embedding
 from digitalhistopathology.datasets.image_embedding_dataset import ImageEmbeddingDataset
 from digitalhistopathology.visualization.spatial_viz import SpatialViz
 from tqdm import tqdm
-
+import h5py
+import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 
 class ImageEmbedding(Embedding, SpatialViz):
@@ -87,6 +88,8 @@ class ImageEmbedding(Embedding, SpatialViz):
         Raises:
             Exception: If there is not enough information to compute the embeddings
         """
+
+
         if (self.pretrained_model is not None and self.patches_filenames is not None) or self.emb_path is not None:
             if self.emb_path is not None:
                 embeddings_df = pd.read_csv(self.emb_path, index_col=0)
@@ -109,8 +112,10 @@ class ImageEmbedding(Embedding, SpatialViz):
         """
         print("Load data...")
         if self.patches_filenames[0].endswith(".hdf5"):
+            print("Loading patches from hdf5 file", flush=True)
             images_dataset = ImageEmbeddingDataset(hdf5_file=self.patches_filenames[0], model_name=self.pretrained_model.name)
         else:
+            print("Loading patches from folder", flush=True)
             images = pd.DataFrame(sorted(self.patches_filenames), columns=["filename"])
             images_dataset = ImageEmbeddingDataset(images_filenames_pd=images, model_name=self.pretrained_model.name)
 
@@ -192,11 +197,21 @@ class ImageEmbedding(Embedding, SpatialViz):
                 if col < len(samples):
                     sample = samples[col]
                     img_path = patches_dict.get(sample)
-                    if img_path:
+                    if os.path.exists(img_path):
                         img = mpimg.imread(img_path)
                         plt.imshow(img)
                         plt.title(sample)
-                plt.axis('off')
+                        plt.axis('off')
+                    else:
+                        path_to_hdf5 = os.path.dirname(self.patches_info_filename)
+                        with h5py.File(os.path.join(path_to_hdf5, 'patches.hdf5'), "r") as f:
+                            img = f[sample][()]
+                            if img.ndim == 2:
+                                plt.imshow(img, cmap='gray')
+                            else:
+                                plt.imshow(img.astype(np.uint8))
+                            plt.title(sample)
+                            plt.axis('off')
                 
                 if col == int(np.floor(max_samples/2) - 1):
                     plt.text(s=f'Cluster {key}', x=0, y=-20, ha='left', va='bottom', fontsize=20, weight='bold')

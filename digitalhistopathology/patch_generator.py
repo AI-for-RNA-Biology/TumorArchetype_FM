@@ -25,7 +25,7 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 import matplotlib.pyplot as plt
 from openslide.deepzoom import DeepZoomGenerator
-from PIL import ExifTags, Image
+from PIL import ExifTags, Image, ImageFile
 from skimage.measure import shannon_entropy
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 
@@ -33,12 +33,13 @@ Image.MAX_IMAGE_PIXELS = None
 random.seed(42)
 np.random.seed(42)
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 class PatchGenerator:
     """Class to tile whole-slide images into patches."""
 
-    # SHANNON_ENTROPY_THRESHOLD = 6.451
-    SHANNON_ENTROPY_THRESHOLD = 5.5
+    SHANNON_ENTROPY_THRESHOLD = 6.451
+    # SHANNON_ENTROPY_THRESHOLD = 5.5
 
     def __init__(
         self,
@@ -49,15 +50,16 @@ class PatchGenerator:
         overlap_pixels=0,
         extension="tiff",
         filter_background=True,
-        saving_folder="../results/patches_test/",
+        saving_folder="results/patches_test/",
         name_patches_info_file="patches_info.pkl.gz",
         images_filenames_spot_patches=None,
         spots_filenames=None,
         spot_mask=True,
         spot_diameter=None,
         filter_with_neighbours=True,
-        log_file="../logs/compute_patches.log",
+        log_file="logs/compute_patches.log",
         spots_df=None,
+        allow_offset_for_random_patches=False
     ):
         """
         Args:
@@ -68,15 +70,16 @@ class PatchGenerator:
             overlap_pixels (int, optional): Number of overlapping pixels you allow for the patches computation. Better to give an even number because the pixels are shared between columns and rows. Defaults to 0.
             extension (str, optional): Extension of your patches files. Defaults to "tiff".
             filter_background (bool, optional): If you want to have only foreground patches. Defaults to True.
-            saving_folder (str, optional): Where to save the patches and the information file. Defaults to "../results/patches_test/".
+            saving_folder (str, optional): Where to save the patches and the information file. Defaults to "results/patches_test/".
             name_patches_info_file (str, optional): Name of the information file. Need to end with .pkl.gz. Defaults to "patches_info.pkl.gz".
             images_filenames_spot_patches (list, optional): List of image files from which spot patches are computed. Defaults to None.
             spots_filenames (list, optional): List of spots location filename corresponding to the images_filenames_spot_patches. Defaults to None.
             spot_mask (bool, optional): Whether or not using the circular mask for the spot patches. Defaults to True.
             spot_diameter (float, optional): Diameter of the spot size on the image in pixels. Defaults to None.
             filter_with_neighbours (bool, optional): Whether to post-filter patches with neighbours threshold. Defaults to True.
-            log_file (str, optional): Logging file. Defaults to "../logs/compute_patches.log".
-            spots
+            log_file (str, optional): Logging file. Defaults to "logs/compute_patches.log".
+            spots_df (pd.DataFrame, optional): DataFrame containing spots information. Defaults to None.
+            allow_offset_for_random_patches (bool, optional): Whether to allow offset for random patches. Defaults to False.
         """
 
         self.spots_df = spots_df
@@ -110,9 +113,11 @@ class PatchGenerator:
         self.spot_radius = int(spot_diameter / 2) if spot_diameter else None
         self.filter_with_neighbours = filter_with_neighbours
         self.all_patches_info = []
+        self.allow_offset_for_random_patches = allow_offset_for_random_patches
 
-        if not os.path.exists(self.saving_folder):
-            os.mkdir(self.saving_folder)
+        if not os.path.exists(self.saving_folder) and self.saving_folder != "":
+            print("Creating saving folder: {}".format(self.saving_folder), flush=True)
+            os.makedirs(self.saving_folder, exist_ok=True)
 
     @staticmethod
     def mpp_from_a_non_pyramidal_image(img, file):
@@ -134,8 +139,8 @@ class PatchGenerator:
         except Exception as e:
             logging.warning("No exif resolution for this image, try with in another way: {}".format(e))
             resolution_unit = 2
-            resolution_width = img.info["dpi"][0]
-            resolution_height = img.info["dpi"][1]
+            resolution_width = img.info.get("dpi", (72, 72))[0]
+            resolution_height = img.info.get("dpi", (72, 72))[1]
 
         if resolution_width == 72 and resolution_height == 72:
             logging.warning("Default value for resolution only!!")
@@ -147,6 +152,9 @@ class PatchGenerator:
                 logging.info("Set estimated resolution for HER2 breast cancer data from QPath")
                 mpp_width = 1
                 mpp_height = 1
+            elif "TNBC" in file:
+                mpp_height = 0.40
+                mpp_width = 0.40
         else:
             if resolution_unit == 2:
                 # pixels per inch
@@ -237,6 +245,9 @@ class PatchGenerator:
             shape_origin = (slide.dimensions[1], slide.dimensions[0], 3)
             # resolution
             mpp_width, mpp_height = self.mpp_from_a_pyramidal_image(slide)
+            
+            img = slide.get_thumbnail(slide.dimensions).convert("RGB")
+            img = np.array(img)
         else:
             img = Image.open(img_filename).convert("RGB")
             # Resolution
@@ -258,37 +269,54 @@ class PatchGenerator:
             )
 
         # Generate the patches locations
-        if pyramidal_image:
-            # overlap = the number of extra pixels to add to each interior edge of a tile
-            # tile_size = the width and height of a single tile = tile_size + 2 * overlap
-            tiles = DeepZoomGenerator(
-                slide,
-                tile_size=self.patch_size_pixels - 2 * int(self.overlap_pixels / 2),
-                overlap=int(self.overlap_pixels / 2),
-                limit_bounds=False,
-            )
-            # tiles at the max resolution
-            cols, rows = tiles.level_tiles[tiles.level_count - 1]
+        # if pyramidal_image:
+        #     # overlap = the number of extra pixels to add to each interior edge of a tile
+        #     # tile_size = the width and height of a single tile = tile_size + 2 * overlap
+        #     tiles = DeepZoomGenerator(
+        #         slide,
+        #         tile_size=self.patch_size_pixels - 2 * int(self.overlap_pixels / 2),
+        #         overlap=int(self.overlap_pixels / 2),
+        #         limit_bounds=False,
+        #     )
+        #     # tiles at the max resolution
+        #     cols, rows = tiles.level_tiles[tiles.level_count - 1]
 
-            # -1 because the border left and bottom tiles are usually smaller (because the slide is not perfectly divided by our pacth size)
-            # we discard it, usually it will be only background, so it does not matter
-            all_cols = list(np.arange(0, cols - 1))
-            all_rows = list(np.arange(0, rows - 1))
+        #     # -1 because the border left and bottom tiles are usually smaller (because the slide is not perfectly divided by our pacth size)
+        #     # we discard it, usually it will be only background, so it does not matter
+        #     all_cols = list(np.arange(0, cols - 1))
+        #     all_rows = list(np.arange(0, rows - 1))
+        # else:
+        if self.allow_offset_for_random_patches:
+            offset_range = range(0, self.patch_size_pixels, 25)
         else:
-            step = self.patch_size_pixels - int(self.overlap_pixels / 2)
-            assert (
-                step > 0
-            ), "Step cannot be lower than 1, you fix an overlap pixels number bigger than the patch size: {} > {}".format(
-                self.overlap_pixels, self.patch_size_pixels
-            )
+            offset_range = [0]
+            
+        step = self.patch_size_pixels - int(self.overlap_pixels / 2)
+        assert (
+            step > 0
+        ), "Step cannot be lower than 1, you fix an overlap pixels number bigger than the patch size: {} > {}".format(
+            self.overlap_pixels, self.patch_size_pixels
+        )
+        all_tuples_row_col = []
+        
+        # for row_offset in offset_range:
+        #     for col_offset in offset_range:
+        #         row_for_this_grid = list(np.arange(row_offset, img.shape[0] - self.patch_size_pixels, step))
+        #         col_for_this_grid = list(np.arange(col_offset, img.shape[1] - self.patch_size_pixels, step))
+        #         all_tuples_row_col.extend(itertools.product(row_for_this_grid, col_for_this_grid))
+        
+        for offset in offset_range:
+            row_for_this_grid = list(np.arange(offset, img.shape[0] - self.patch_size_pixels, step))
+            col_for_this_grid = list(np.arange(offset, img.shape[1] - self.patch_size_pixels, step))
+            all_tuples_row_col.extend(itertools.product(row_for_this_grid, col_for_this_grid))
 
-            # possible heights list
-            all_rows = list(np.arange(0, img.shape[0] - self.patch_size_pixels, step))
-            # possible widths list
-            all_cols = list(np.arange(0, img.shape[1] - self.patch_size_pixels, step))
+        # # possible heights list
+        # all_rows = list(np.arange(0, img.shape[0] - self.patch_size_pixels, step))
+        # # possible widths list
+        # all_cols = list(np.arange(0, img.shape[1] - self.patch_size_pixels, step))
 
-        # all possible patches location,
-        all_tuples_row_col = list(itertools.product(all_rows, all_cols))
+        # # all possible patches location,
+        # all_tuples_row_col = list(itertools.product(all_rows, all_cols))
         logging.debug("Maximum number of patches without background filtering = {}".format(len(all_tuples_row_col)))
         patches_info_list = []
 
@@ -296,6 +324,8 @@ class PatchGenerator:
             patches_number = len(all_tuples_row_col)
         else:
             patches_number = self.patches_number
+        
+        print(f"Will compute {patches_number} random patches", flush=True)
 
         while len(patches_info_list) < patches_number and len(all_tuples_row_col) > 0:
             logging.debug(
@@ -307,17 +337,17 @@ class PatchGenerator:
             rand_tuple_row_col = all_tuples_row_col.pop(rand_ind_tuple_row_col)
             logging.debug("(random row, random col) = {}".format(rand_tuple_row_col))
 
-            if pyramidal_image:
-                rand_row, rand_col = rand_tuple_row_col
-                patch = tiles.get_tile(tiles.level_count - 1, (rand_col, rand_row)).convert("RGB")
-                patch = np.array(patch)
-            else:
-                rand_start_h, rand_start_w = rand_tuple_row_col
-                patch = img[
-                    rand_start_h : rand_start_h + self.patch_size_pixels,
-                    rand_start_w : rand_start_w + self.patch_size_pixels,
-                    :,
-                ]
+            # if pyramidal_image:
+            #     rand_row, rand_col = rand_tuple_row_col
+            #     patch = tiles.get_tile(tiles.level_count - 1, (rand_col, rand_row)).convert("RGB")
+            #     patch = np.array(patch)
+            # else:
+            rand_start_h, rand_start_w = rand_tuple_row_col
+            patch = img[
+                rand_start_h : rand_start_h + self.patch_size_pixels,
+                rand_start_w : rand_start_w + self.patch_size_pixels,
+                :,
+            ]
 
             mean = patch.mean()
             std = patch.std()
@@ -333,7 +363,9 @@ class PatchGenerator:
                 patch_ok = True
 
             if patch_ok:
+                
                 origin_name = img_filename.split("/")[-1].split("." + img_filename.split(".")[-1])[0]
+                print(f"Origin name = {origin_name}", flush=True)
                 # special case for HER2 breast cancer data
                 if len(origin_name) == 2:
                     name = (
@@ -356,11 +388,12 @@ class PatchGenerator:
                     Image.fromarray(patch).save(saving_path)
                     logging.debug("Patch saved to {}".format(os.path.abspath(saving_path)))
                 else:
+                    print(f"Saving random patch: {name}", flush=True)
                     hdf5_file.create_dataset(name, data=patch)
                     logging.debug("Patch saved to hdf5 file")
 
-                if pyramidal_image:
-                    rand_start_w, rand_start_h = tiles.get_tile_coordinates(tiles.level_count - 1, (rand_col, rand_row))[0]
+                # if pyramidal_image:
+                #     rand_start_w, rand_start_h = tiles.get_tile_coordinates(tiles.level_count - 1, (rand_col, rand_row))[0]
 
                 patch_data = {
                     "path": os.path.abspath(saving_path),
@@ -519,66 +552,75 @@ class PatchGenerator:
             start_x = int(row["pixel_x"] - self.spot_radius)
             start_y = int(row["pixel_y"] - self.spot_radius)
             patch = img[start_y : start_y + 2 * self.spot_radius, start_x : start_x + 2 * self.spot_radius, :]
-
-            # Create a spot mask on the patch
-            if self.spot_mask:
-                mask = self.create_circular_mask(patch.shape[0], patch.shape[1], radius=self.spot_radius)
-                patch = np.expand_dims(mask, axis=2) * patch
-
-            origin_name = img_filename.split("/")[-1].split(
-                "." + img_filename.split(".")[-1]
-            )[0]
-            if spots_df.columns.str.contains("source_file").any():
-                name = (
-                    spots_df.loc[index, "source_file"]
-                    + "_spot{}x{}".format(int(row["x"]), int(row["y"]))
-                )
-            else:
-                name = (
-                    origin_name[0]
-                    + "_rep"
-                    + origin_name[1]
-                    + "_spot{}x{}".format(int(row["x"]), int(row["y"]))
-                )
             
-            saving_path = os.path.join(self.saving_folder, name + "." + self.extension)
-            if hdf5_file is None:
-                Image.fromarray(patch).save(saving_path)
-                logging.debug("Patch saved to {}".format(os.path.abspath(saving_path)))
+            entropy = shannon_entropy(patch)
+            if self.filter_background:
+                patch_ok = entropy > self.SHANNON_ENTROPY_THRESHOLD
             else:
-                hdf5_file.create_dataset(name, data=patch)
-                logging.debug("Patch saved to hdf5 file")
+                patch_ok = True
 
-            patch_data = {
-                "path": os.path.abspath(saving_path),
-                "name": name,
-                "mpp_height": None,
-                "mpp_width": None,
-                "shape_micron": None,
-                "shape_pixel": patch.shape[0],
-                "overlap_pixel": None,
-                "path_origin": img_filename,
-                "name_origin": origin_name,
-                "shape_origin": img.shape,
-                "start_height_origin": start_y,
-                "start_width_origin": start_x,
-                "extension_origin": img_filename.split(".")[-1],
-                "batch": img_filename.split("/data/")[-1].split("/")[0].replace("_", " ").capitalize(),
-                "tumor": name.split("_spot")[0].split(".")[0].split("_rep")[0],
-                "mean_intensity": np.mean(patch),
-                "median_intensity": np.median(patch),
-                "std_intensity": np.std(patch),
-                "entropy_intensity": shannon_entropy(patch),
-                "spots_info": {
-                    "y": int(row["y"]),
-                    "x": int(row["x"]),
-                    "radius_pixel": self.spot_radius,
-                },
-            }
-            patches_info_list.append(patch_data)
+            if patch_ok:
+                # Create a spot mask on the patch
+                if self.spot_mask:
+                    mask = self.create_circular_mask(patch.shape[0], patch.shape[1], radius=self.spot_radius)
+                    patch = np.expand_dims(mask, axis=2) * patch
 
-            patch = None
-        logging.info("Finish saving {} spots patches".format(len(patches_info_list)))
+                origin_name = img_filename.split("/")[-1].split(
+                    "." + img_filename.split(".")[-1]
+                )[0]
+                if spots_df.columns.str.contains("source_file").any():
+                    name = (
+                        spots_df.loc[index, "source_file"]
+                        + "_spot{}x{}".format(int(row["x"]), int(row["y"]))
+                    )
+                else:
+                    name = (
+                        origin_name[0]
+                        + "_rep"
+                        + origin_name[1]
+                        + "_spot{}x{}".format(int(row["x"]), int(row["y"]))
+                    )
+                    
+                print(f"Name = {name}", flush=True)
+                
+                saving_path = os.path.join(self.saving_folder, name + "." + self.extension)
+                if hdf5_file is None:
+                    Image.fromarray(patch).save(saving_path)
+                    logging.debug("Patch saved to {}".format(os.path.abspath(saving_path)))
+                else:
+                    hdf5_file.create_dataset(name, data=patch)
+                    logging.debug("Patch saved to hdf5 file")
+
+                patch_data = {
+                    "path": os.path.abspath(saving_path),
+                    "name": name,
+                    "mpp_height": None,
+                    "mpp_width": None,
+                    "shape_micron": None,
+                    "shape_pixel": patch.shape[0],
+                    "overlap_pixel": None,
+                    "path_origin": img_filename,
+                    "name_origin": origin_name,
+                    "shape_origin": img.shape,
+                    "start_height_origin": start_y,
+                    "start_width_origin": start_x,
+                    "extension_origin": img_filename.split(".")[-1],
+                    "batch": img_filename.split("/data/")[-1].split("/")[0].replace("_", " ").capitalize(),
+                    "tumor": name.split("_spot")[0].split(".")[0].split("_rep")[0],
+                    "mean_intensity": np.mean(patch),
+                    "median_intensity": np.median(patch),
+                    "std_intensity": np.std(patch),
+                    "entropy_intensity": shannon_entropy(patch),
+                    "spots_info": {
+                        "y": int(row["y"]),
+                        "x": int(row["x"]),
+                        "radius_pixel": self.spot_radius,
+                    },
+                }
+                patches_info_list.append(patch_data)
+
+                patch = None
+            logging.info("Finish saving {} spots patches".format(len(patches_info_list)))
 
         self.all_patches_info.extend(patches_info_list)
 
@@ -588,6 +630,7 @@ class PatchGenerator:
         if self.images_filenames_random_patches is not None:
 
             for file in self.images_filenames_random_patches:
+                print(f"Computing random patches for file {file}", flush=True)
                 try:
                     patches_info = self.random_patches(
                         file,
@@ -620,7 +663,7 @@ class PatchGenerator:
                 self.spots_filenames
             ), "images_filenames_spot_patches and spots_filenames does not have the same size"
             for img_file, spots_file in zip(sorted(self.images_filenames_spot_patches), sorted(self.spots_filenames)):
-                spots_df = pd.read_csv(spots_file, sep="\t", compression="gzip")
+                spots_df = pd.read_csv(spots_file, sep="\t") #, compression="gzip")
                 self.spots_patches(img_file, spots_df, hdf5_file=hdf5_file)
                 
         elif (
@@ -647,10 +690,10 @@ class PatchGenerator:
     @staticmethod
     def get_random_balanced_benchmark_files():
         """Get random WSI with a balanced number from the human melanoma, HER2-positive breast cancer and TCGA dataset to create the benchmark dataset."""
-        hm = sorted(glob.glob("../data/human_melanoma/raw_images/*.jpg"))
-        tcga = sorted(glob.glob("../data/tcga/*/*.svs"))
+        hm = sorted(glob.glob("data/human_melanoma/raw_images/*.jpg"))
+        tcga = sorted(glob.glob("data/tcga/*/*.svs"))
         # filtering patient A
-        her2 = sorted(glob.glob("../data/HER2_breast_cancer/images/HE/*.jpg"))[6:]
+        her2 = sorted(glob.glob("data/HER2/images/HE/*.jpg"))[6:]
         files_number = int(min([len(hm), len(tcga), len(her2)]))
         benchmark_list = random.sample(hm, files_number)
         benchmark_list.extend(random.sample(tcga, files_number))
@@ -855,9 +898,9 @@ class PatchGenerator:
             if "path_origin" in group.columns:
                 path_origin = group["path_origin"].iloc[0]
             else:
-                path_origin = glob.glob("../data/HER2_breast_cancer/images/HE/{}.jpg".format(group["name_origin"].iloc[0]))
-                path_origin.extend(glob.glob("../data/human_melanoma/raw_images/{}.jpg".format(group["name_origin"].iloc[0])))
-                path_origin.extend(glob.glob("../data/tcga/*/{}*.svs".format(group["name_origin"].iloc[0])))
+                path_origin = glob.glob("data/HER2/images/HE/{}.jpg".format(group["name_origin"].iloc[0]))
+                path_origin.extend(glob.glob("data/human_melanoma/raw_images/{}.jpg".format(group["name_origin"].iloc[0])))
+                path_origin.extend(glob.glob("data/tcga/*/{}*.svs".format(group["name_origin"].iloc[0])))
                 assert len(path_origin) == 1
                 path_origin = path_origin[0]
 

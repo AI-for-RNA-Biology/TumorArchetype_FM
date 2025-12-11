@@ -116,7 +116,7 @@ class DimRed:
         explained_variance_ratio = eigenvalues / np.sum(eigenvalues)
         return explained_variance_ratio
     
-    def get_shannon_entropy(self, n_comp=None, denoised=None, rescale=False, pct=None,cancer_patches=False):
+    def get_shannon_entropy(self, n_comp=None, denoised=None, rescale=False, pct=None):
         """Get the Shannon entropy from the svd. The higher it is, the more spread is the variance across components.
 
         Args:
@@ -216,7 +216,7 @@ class DimRed:
             subset = DimRed()
             subset.emb = self.emb[groups[batch], :]
             subset.compute_svd(denoised=denoised)
-            entropy_dict[batch] = subset.get_shannon_entropy(n_comp=n_comp, denoised=denoised, pct=pct, rescale=rescale,cancer_patches=cancer_patches)
+            entropy_dict[batch] = subset.get_shannon_entropy(n_comp=n_comp, denoised=denoised, pct=pct, rescale=rescale)
         return entropy_dict
 
     def get_kl_divergence_per_group(

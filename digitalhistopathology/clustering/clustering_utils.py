@@ -185,7 +185,7 @@ def clustering_boxplot_per_patient(data, name, folder, ylabel="ari", saving_plot
         )
     plt.close()
 
-def plot_ari_scores_all_patients(clustering_dict, model_list=None, stripplot=True, color_boxes=False):
+def plot_ari_scores_all_patients(clustering_dict, model_list=None, stripplot=True, color_boxes=False, palette=None):
 
     if model_list is None:
         model_list = clustering_dict.keys()
@@ -201,7 +201,7 @@ def plot_ari_scores_all_patients(clustering_dict, model_list=None, stripplot=Tru
     df_aris_melted['patient'] = df_aris.index.to_list()*len(df_aris.columns)
 
     if color_boxes:
-        sns.boxplot(data=df_aris_melted, x='model', y='ari', hue='model', linewidth=2, showfliers=False)
+        sns.boxplot(data=df_aris_melted, x='model', y='ari', hue='model', linewidth=2, showfliers=False, palette=palette)
     else:
         sns.boxplot(data=df_aris_melted, x='model', y='ari', color='white', linewidth=2, showfliers=False)
     if stripplot:

@@ -104,12 +104,15 @@ class EngineeredFeatures(ImageEmbedding):
 
         if self.result_saving_folder is not None:
             if not os.path.exists(self.result_saving_folder):
-                os.makedirs(self.result_saving_folder)
+                os.makedirs(self.result_saving_folder, exist_ok=True)
             
-        self.save_path = os.path.join(self.result_saving_folder, self.dataset_name)
+            self.save_path = os.path.join(self.result_saving_folder, self.dataset_name)
 
-        if not os.path.exists(self.save_path):
-            os.makedirs(self.save_path)
+            if not os.path.exists(self.save_path):
+                os.makedirs(self.save_path, exist_ok=True)
+                
+        else:
+            self.save_path = None
 
         if patches_info_filename is not None:
             with gzip.open(patches_info_filename) as file:
@@ -125,15 +128,19 @@ class EngineeredFeatures(ImageEmbedding):
             Exception: Attribute emb_df is empty
         """
         print("Filling emb...")
-        if len(self.emb_df) > 0:
-            print("Emb_df is not empty.")
-            self.emb = ad.AnnData(self.emb_df)
-            if self.patches_info_filename is not None:
-                print("Loading patches info...")
-                patches_info_df = self.load_patches_infos()
-                self.emb.obs = self.emb.obs.merge(patches_info_df, right_index=True, left_index=True)
-        else:
-            raise Exception("Cannot fill emb because emb_df is empty.")
+        try:
+            if len(self.emb_df) > 0:
+                print("Emb_df is not empty.")
+                self.emb = ad.AnnData(self.emb_df)
+                if self.patches_info_filename is not None:
+                    print("Loading patches info...")
+                    patches_info_df = self.load_patches_infos()
+                    self.emb.obs = self.emb.obs.merge(patches_info_df, right_index=True, left_index=True)
+            else:
+                self.emb_df = None
+        except:
+            self.emb_df = None
+
         
     
     def load_emb_df(self):
@@ -146,6 +153,7 @@ class EngineeredFeatures(ImageEmbedding):
             self.emb_df = pd.read_csv(self.emb_df_csv, index_col=0)
         except:
             print("File storing the emf_df doesn't exist - You need to compute the engineered features first.")
+            self.emb_df = None
         # self.emb_df['detection_mask'] = self.emb_df['detection_mask'].apply(lambda x: pickle.loads(eval(x)))
 
     def save_emb(self):
@@ -325,11 +333,12 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                                         'WholePatch-Texture': 'brown',
                                         'WholePatch-Morph': 'lightblue'}
         
-        if not os.path.exists(os.path.join(self.save_path, "zernike_cell")):
-            os.makedirs(os.path.join(self.save_path, "zernike_cells"), exist_ok=True)
-        
-        if not os.path.exists(os.path.join(self.save_path, "patch_to_cell")):
-            os.makedirs(os.path.join(self.save_path, "patch_to_cell"), exist_ok=True)
+        if self.save_path is not None:
+            if not os.path.exists(os.path.join(self.save_path, "zernike_cell")):
+                os.makedirs(os.path.join(self.save_path, "zernike_cells"), exist_ok=True)
+            
+            if not os.path.exists(os.path.join(self.save_path, "patch_to_cell")):
+                os.makedirs(os.path.join(self.save_path, "patch_to_cell"), exist_ok=True)
                               
 
     def convertjson_from_cellvit_to_scMTOP(self, cellvit_json_filename):
@@ -405,14 +414,15 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                          "scn",
                          "ndpi",
                          "vms",
-                         "vmu"]:
+                         "vmu", 
+                         "qptiff"]:
             return path_to_wsi
         elif extension == 'jpg':
             image = pyvips.Image.new_from_file(path_to_wsi, access='sequential')
             path_new_tif = os.path.join(self.temporary_folder, self.dataset_name, "wsi", f"{filename}.tif")
 
             if not os.path.exists(os.path.dirname(path_new_tif)):
-                os.makedirs(os.path.dirname(path_new_tif))
+                os.makedirs(os.path.dirname(path_new_tif), exist_ok=True)
 
             image.tiffsave(path_new_tif,
                            compression="jpeg",
@@ -810,6 +820,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         emb_dfs = []
 
         csv_files = glob.glob(os.path.join(self.save_path, "*scMTOP.csv"))
+        print(f"Found {len(csv_files)} scMTOP csv files in {self.save_path}", flush=True)
         for file in csv_files:
             sample_name = os.path.basename(file).split('_scMTOP.csv')[0]
             if sample_name != self.dataset_name:
@@ -835,15 +846,18 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         self.emb_df = pd.read_csv(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"), index_col=0)
 
     def load_emb_df(self):
-        if os.path.exists(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv")):
-            print("Loading the whole scMTOP embedding from ", os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"))
-            self.load_emb_df_from_whole()
-        else:
-            try:
-                self.load_emb_df_from_individual_wsi()
-            except:
-                warnings.warn("No scMTOP embedding found. Embedding will be empty.")
-                self.emb_df = pd.DataFrame()
+        try:
+            if os.path.exists(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv")):
+                print("Loading the whole scMTOP embedding from ", os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"))
+                self.load_emb_df_from_whole()
+            else:
+                try:
+                    self.load_emb_df_from_individual_wsi()
+                except:
+                    warnings.warn("No scMTOP embedding found. Embedding will be empty.")
+                    self.emb_df = None
+        except:
+            self.emb_df = None
 
 
 

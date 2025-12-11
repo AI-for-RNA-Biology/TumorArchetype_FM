@@ -35,9 +35,9 @@ import warnings
 import torch.nn.utils as utils
 import logging
 import sys
-from timm.layers import SwiGLUPacked
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..","dinov2"))
-sys.path.append(project_root)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+dinov2_path = os.path.join(project_root, "dinov2")
+sys.path.append(dinov2_path)
 
 from digitalhistopathology.access_token import READ_ONLY_HF_TOKEN
 
@@ -253,27 +253,64 @@ class Model(nn.Module):
         return np.mean(losses)
 
 
-class CTransPath(Model):
+# class CTransPath(Model):
+#     """CTransPath pretrained model on digital histopathology datasets, from https://github.com/Xiyue-Wang/TransPath.
+#     Get the backbone embeddings without the linear projection head."""
+#     def __init__(
+#         self,
+#         pretrained_model_path="../pretrained_models/ctranspath.pth",
+#         head="",
+#         pretrained=False,
+#         path_to_model=None,
+#         lr=0.3,
+#         beta1=0.9,
+#         beta2=0.999,
+#         weight_decay=1e-6,
+#     ):
+#         print("Load pretrained ctranspath model...")
+#         model = torch.load("pytorch_model.bin", map_location=device)
+#         if torch.cuda.is_available():
+#             model = model.cuda()
+#         super().__init__( name="CTransPath",model=model)
+
+class PretrainedModel:
+    """Class for loading pretrained model from a filename."""
+
+    def __init__(self, pretrained_model_path, name):
+        """
+        Args:
+            pretrained_model_path (str): Path to the model weights.
+            name (str): Name of the pretrained model.
+        """
+        super().__init__()
+        self.pretrained_model_path = pretrained_model_path
+        self.name = name
+
+    def load(self):
+        """Load the pretrained model and set it to the correct device to be ready to do inference."""
+        pass
+
+
+class CTransPath(PretrainedModel):
     """CTransPath pretrained model on digital histopathology datasets, from https://github.com/Xiyue-Wang/TransPath.
     Get the backbone embeddings without the linear projection head."""
-    def __init__(
-        self,
-        pretrained_model_path="../pretrained_models/ctranspath.pth",
-        head="",
-        pretrained=False,
-        path_to_model=None,
-        lr=0.3,
-        beta1=0.9,
-        beta2=0.999,
-        weight_decay=1e-6,
-    ):
+
+    def __init__(self):
+        default_path = os.path.join(project_root, "pretrained_models", "ctranspath.pth")
+        super().__init__(default_path, name="CTransPath")
+        
+        self.model = self.load()
+
+    def load(self):
         print("Load pretrained ctranspath model...")
-        model = torch.load("pytorch_model.bin", map_location=device)
+        model = timm.create_model("swin_tiny_patch4_window7_224", embed_layer=ConvStem, pretrained=False)
+        model.head = nn.Identity()
+        td = torch.load(self.pretrained_model_path, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=False)
+        model.load_state_dict(td["model"], strict=True)
         if torch.cuda.is_available():
             model = model.cuda()
-        super().__init__( name="CTransPath",model=model)
-
-
+        return model
+    
 def download_model(self, url, save_path):
     print(f"Downloading model from {url}...")
     urllib.request.urlretrieve(url, save_path)
@@ -288,7 +325,7 @@ class SimCLR(Model):
 
     def __init__(
         self,
-        pretrained_model_path="../pretrained_models/tenpercent_resnet18.ckpt",
+        pretrained_model_path=None,
         name="SimCLR",
         batch_size=512,
         num_epochs=100,
@@ -305,7 +342,7 @@ class SimCLR(Model):
     ):
         """
         Args:
-            pretrained_model_path (str, optional): Path the pretrained or retrained model weigths. Defaults to "../pretrained_models/tenpercent_resnet18.ckpt".
+            pretrained_model_path (str, optional): Path the pretrained or retrained model weigths. Defaults to None (uses default pretrained model).
             name (str, optional): Name of the model. Defaults to "SimCLR".
             training_dataset_files_list (list, optional): List with patches path to be used for the retraining. Defaults to [].
 
@@ -318,10 +355,12 @@ class SimCLR(Model):
             state = torch.load(
                 pretrained_model_path,
                 map_location=device,
+                weights_only=False
             )
         else:
+            default_path = os.path.join(project_root, "pretrained_models", "tenpercent_resnet18.ckpt")
             state = torch.load(
-                "../pretrained_models/tenpercent_resnet18.ckpt",
+                default_path,
                 map_location=torch.device(
                     "cuda" if torch.cuda.is_available() else "cpu"
                 ),
@@ -358,9 +397,9 @@ class UNI(Model):
         if pretrained_model_path:
             print("Load pretrained uni model...")
             if device == torch.device("cpu"):
-                model = torch.load(pretrained_model_path, map_location=device)
+                model = torch.load(pretrained_model_path, map_location=device, weights_only=False)
             else:
-                model = torch.load(pretrained_model_path)
+                model = torch.load(pretrained_model_path, weights_only=False)
         else:
             print("Load MahmoodLab/UNI model from Hugging Face Hub...")
             model = timm.create_model(
@@ -386,9 +425,9 @@ class Uni2(Model):
         if pretrained_model_path:
             print("Load pretrained uni model...")
             if device == torch.device("cpu"):
-                model = torch.load(pretrained_model_path, map_location=device)
+                model = torch.load(pretrained_model_path, map_location=device, weights_only=False)
             else:
-                model = torch.load(pretrained_model_path)
+                model = torch.load(pretrained_model_path, weights_only=False)
         else:
             print("Load MahmoodLab/UNI model from Hugging Face Hub...")
             timm_kwargs = {
@@ -411,6 +450,7 @@ class Uni2(Model):
         super().model_head(model, head)
 
         super().__init__(name="UNI2", model=model)
+        
 class Virchow(Model):
     """Access must be granted to use this model, you must agree to the outlined terms of use: https://huggingface.co/MahmoodLab/Virchow"""
 
@@ -423,13 +463,13 @@ class Virchow(Model):
         if pretrained_model_path:
             print("Load pretrained Virchow model...")
             if device == torch.device("cpu"):
-                model = torch.load(pretrained_model_path, map_location=device)
+                model = torch.load(pretrained_model_path, map_location=device, weights_only=False)
             else:
-                model = torch.load(pretrained_model_path)
+                model = torch.load(pretrained_model_path, weights_only=False)
         else:
             print("Load MahmoodLab/Virchow model from Hugging Face Hub...")
             # need to specify MLP layer and activation function for proper init
-            model = timm.create_model("hf-hub:paige-ai/Virchow2", pretrained=True, mlp_layer=SwiGLUPacked, act_layer=torch.nn.SiLU)
+            model = timm.create_model("hf-hub:paige-ai/Virchow2", pretrained=True, mlp_layer=timm.layers.SwiGLUPacked, act_layer=torch.nn.SiLU)
         
         # Modify the forward method to return only the cls_token
         original_forward = model.forward
@@ -444,8 +484,10 @@ class Virchow(Model):
 
         super().__init__(name="Virchow", model=model)
 class ProvGigaPath(Model):
+    """Access must be granted to use this model, you must agree to the outlined terms of use: https://huggingface.co/prov-gigapath/prov-gigapath"""
 
     def __init__(self):
+        login(token=READ_ONLY_HF_TOKEN)  # logout done at the end of pipeline.run
         model = timm.create_model("hf_hub:prov-gigapath/prov-gigapath", pretrained=True)
 
         super().__init__(

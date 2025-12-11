@@ -5,12 +5,14 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 #
-import sys
-
-sys.path.append("../")
+import os
 import argparse
 
+import sys
+sys.path.append(os.getcwd())
+
 from digitalhistopathology.patch_generator import PatchGenerator
+
 
 def main():
     parser = argparse.ArgumentParser(description="Create a subset HDF5 file with selected patches.")
@@ -19,6 +21,7 @@ def main():
         "-o",
         required=True,
         help="Path to the original HDF5 file.",
+        default="results/HER2/compute_patches/all/patches.hdf5",
         type=str,
     )
     parser.add_argument(
@@ -26,6 +29,7 @@ def main():
         "-c",
         required=True,
         help="Path to the CSV file containing the names of the patches to include.",
+        default="results/HER2/pipeline/uni/select_invasive_cancer/selected_invasive_cancer.csv",
         type=str,
     )
     parser.add_argument(
@@ -33,12 +37,13 @@ def main():
         "-n",
         required=True,
         help="Path to save the new HDF5 file.",
+        default="results/HER2/compute_patches/invasive/patches.hdf5",
         type=str,
     )
 
     args = parser.parse_args()
 
-    patch_generator = PatchGenerator()
+    patch_generator = PatchGenerator(saving_folder="")
     patch_generator.create_subset_hdf5(
         original_hdf5_path=args.original_hdf5,
         csv_path=args.csv_path,

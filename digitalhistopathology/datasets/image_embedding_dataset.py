@@ -124,6 +124,7 @@ class ImageEmbeddingDataset(torch.utils.data.Dataset):
             return self.names[idx]
             
     def get_names_from_hdf5(self):
+        print(f"Loading names from hdf5 file: {self.hdf5_file}", flush=True)
         with h5py.File(self.hdf5_file, "r") as f:
             dataset_names = [] 
             def collect_datasets(name, obj): 

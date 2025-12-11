@@ -86,7 +86,7 @@ class BenchmarkCorrelation(BenchmarkBase):
                  group='tumor',
                  cluster_threshold=0.5,
                  corr_type='spearman',
-                 label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv")):        
+                 dataset="HER2"):        
         
         super().__init__(path_to_pipeline=path_to_pipeline, 
                          pipelines_list=pipelines_list, 
@@ -99,7 +99,7 @@ class BenchmarkCorrelation(BenchmarkBase):
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files)
+                         dataset=dataset)
         
 
         self.corr_type = corr_type

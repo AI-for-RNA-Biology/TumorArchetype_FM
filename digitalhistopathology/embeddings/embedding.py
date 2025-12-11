@@ -130,7 +130,7 @@ class Embedding(Classification, Clustering, SpatialViz):
         self.emb.obs.replace("nan", np.nan, inplace=True)
 
 
-    def add_label(self):
+    def add_label(self, dataset='HER2'):
         """Add the label to emb.obs from the label_files. 
         Designed specifically for the format of label files from the HER2-positive breast cancer dataset.
 
@@ -139,77 +139,98 @@ class Embedding(Classification, Clustering, SpatialViz):
             Exception: If there is no spots info in emb.obs columns.
             Exception: If there is no name_origin in emb.obs columns.
         """
-        cols = self.emb.obs.columns
-        if self.label_files is None:
-            raise Exception("No label files")
-        if "spots_info" not in cols and not ("x" in cols and "y" in cols):
-            raise Exception("No spots info in emb.obs columns")
-        if "name_origin" not in cols:
-            raise Exception("No name_origin in emb.obs columns")
+        if dataset == 'HER2':
+            cols = self.emb.obs.columns
+            if self.label_files is None:
+                raise Exception("No label files")
+            if "spots_info" not in cols and not ("x" in cols and "y" in cols):
+                raise Exception("No spots info in emb.obs columns")
+            if "name_origin" not in cols:
+                raise Exception("No name_origin in emb.obs columns")
 
-        print("Start adding labels to patches with {} files".format(len(self.label_files)))
+            print("Start adding labels to patches with {} files".format(len(self.label_files)))
 
-        all_labels_df = pd.DataFrame()
-        for file in self.label_files:
-            compression = "gzip" if file.endswith("gz") else None
-            sep = "\t" if ".tsv" in file.split("/")[-1] else ","
-            current_df = pd.read_csv(file, sep=sep, compression=compression)
+            all_labels_df = pd.DataFrame()
+            for file in self.label_files:
+                compression = "gzip" if file.endswith("gz") else None
+                sep = "\t" if ".tsv" in file.split("/")[-1] else ","
+                current_df = pd.read_csv(file, sep=sep, compression=compression)
 
-            if self.label_files[0].split("/")[-3].split("_")[0] == "HER2":
-                current_df["name_origin"] = file.split("/")[-1].split("_")[0]
-            else:
-                current_df["name_origin"] = file.split("/")[-1].split(".")[0]
+                if self.label_files[0].split("/")[-3].split("_")[0] == "HER2":
+                    current_df["name_origin"] = file.split("/")[-1].split("_")[0]
+                else:
+                    current_df["name_origin"] = file.split("/")[-1].split(".")[0]
 
-            if len(all_labels_df) == 0:
-                all_labels_df = current_df.copy()
-            else:
-                print("Concatenating {} with {} rows".format(file, len(current_df)))
-                all_labels_df = pd.concat((all_labels_df, current_df), axis=0)
+                if len(all_labels_df) == 0:
+                    all_labels_df = current_df.copy()
+                else:
+                    print("Concatenating {} with {} rows".format(file, len(current_df)))
+                    all_labels_df = pd.concat((all_labels_df, current_df), axis=0)
 
-        all_labels_df = all_labels_df.dropna(axis=0)
-        all_labels_df["x"] = all_labels_df["x"].apply(lambda x: round(x))
-        all_labels_df["y"] = all_labels_df["y"].apply(lambda y: round(y))
-        # one problem with one file of her2 dataset
-        all_labels_df.loc[all_labels_df["label"] == "immune infiltrate⁄", "label"] = "immune infiltrate"
+            all_labels_df = all_labels_df.dropna(axis=0)
+            all_labels_df["x"] = all_labels_df["x"].apply(lambda x: round(x))
+            all_labels_df["y"] = all_labels_df["y"].apply(lambda y: round(y))
+            # one problem with one file of her2 dataset
+            all_labels_df.loc[all_labels_df["label"] == "immune infiltrate⁄", "label"] = "immune infiltrate"
 
-        if not ("x" in cols and "y" in cols):
-            print("Adding spots info to emb.obs")
-            spot_df = self.emb[~self.emb.obs["spots_info"].isna()].obs
-            spot_df = spot_df[~(spot_df["spots_info"] == 'nan')]
+            if not ("x" in cols and "y" in cols):
+                print("Adding spots info to emb.obs")
+                spot_df = self.emb[~self.emb.obs["spots_info"].isna()].obs
+                spot_df = spot_df[~(spot_df["spots_info"] == 'nan')]
 
-            # Convert the 'spots_info' column to string
-            spot_df['spots_info'] = spot_df['spots_info'].astype(str)
+                # Convert the 'spots_info' column to string
+                spot_df['spots_info'] = spot_df['spots_info'].astype(str)
 
-            # Parse the string representation into dictionaries
-            spot_df['spots_info'] = spot_df['spots_info'].apply(ast.literal_eval)
+                # Parse the string representation into dictionaries
+                spot_df['spots_info'] = spot_df['spots_info'].apply(ast.literal_eval)
 
-            self.emb.obs = self.emb.obs.merge(
-                pd.json_normalize(spot_df["spots_info"]).set_index(spot_df.index),
-                how="left",
-                left_index=True,
-                right_index=True,
+                self.emb.obs = self.emb.obs.merge(
+                    pd.json_normalize(spot_df["spots_info"]).set_index(spot_df.index),
+                    how="left",
+                    left_index=True,
+                    right_index=True,
+                )
+
+            if "label" in self.emb.obs.columns:
+                print("Here was the error") 
+                self.emb.obs.drop(columns=["label"], inplace=True)
+                print(self.emb.obs.columns)
+
+            self.emb.obs = (
+                self.emb.obs.reset_index()
+                .merge(
+                    all_labels_df[["x", "y", "name_origin", "label"]],
+                    how="left",
+                    on=["x", "y", "name_origin"],
+                )
+                .set_index("index")
             )
 
-        if "label" in self.emb.obs.columns:
-            print("Here was the error") 
-            self.emb.obs.drop(columns=["label"], inplace=True)
-            print(self.emb.obs.columns)
-
-        self.emb.obs = (
-            self.emb.obs.reset_index()
-            .merge(
-                all_labels_df[["x", "y", "name_origin", "label"]],
-                how="left",
-                on=["x", "y", "name_origin"],
+            print(
+                "Added labels to {} / {} patches".format(
+                    len(self.emb.obs) - self.emb.obs["label"].isna().sum(),
+                    len(self.emb.obs),
+                )
             )
-            .set_index("index")
-        )
+            
+        elif dataset == 'TNBC' or dataset == 'Ovarian':
+            
+            all_labels_df = []
+            for file in self.label_files:
+                
+                l = pd.read_csv(file, index_col=0)
+                all_labels_df.append(l)
+                
+            label_file = pd.concat(all_labels_df, axis=0)
+                
 
-        print(
-            "Added labels to {} / {} patches".format(
-                len(self.emb.obs) - self.emb.obs["label"].isna().sum(),
-                len(self.emb.obs),
-            )
-        )
+            self.emb.obs = self.emb.obs.merge(label_file, left_index=True, right_index=True, how="left")
+
+            
+            self.emb.obs.replace("undetermined", np.nan, inplace=True)
+            
+            print(f"Added {dataset} labels to {len(self.emb.obs)} patches. Patches with no label were set to NaNs.")
+        else:
+            raise Exception("Dataset not supported for label addition.")   
 
 

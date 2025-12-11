@@ -1,0 +1,584 @@
+---
+title: "molecular_characterization_of_clusters"
+output: html_document
+date: "2024-12-18"
+jupyter:
+  kernelspec:
+    name: it_digitalhisto
+    display_name: "R (digitalhisto)"
+---
+
+
+```{r setup, include=FALSE}
+Sys.which("R")
+
+knitr::opts_chunk$set(echo = TRUE)
+
+# if (!require("BiocManager", quietly = TRUE))
+#   BiocManager::install("BiocManager")
+# if (!require("DESeq2", quietly = TRUE))
+#   BiocManager::install("DESeq2")
+# library("DESeq2")
+# if (!require("ape", quietly = TRUE))
+#   BiocManager::install("ape")
+# library("ape")
+# if (!require("limma", quietly = TRUE))
+#   BiocManager::install("limma")
+# library("limma")
+# if (!require("geneplotter", quietly = TRUE))
+#   BiocManager::install("geneplotter")
+# library("geneplotter")
+# if (!require("gprofiler2", quietly = TRUE))
+#   BiocManager::install("gprofiler2")
+# library("gprofiler2")
+# if (!require("edgeR", quietly = TRUE))
+#   BiocManager::install("edgeR")
+# library("edgeR")
+# if (!require("AMR", quietly = TRUE))
+#   BiocManager::install("AMR")
+# library("AMR")
+# if (!require("Seurat", quietly = TRUE))
+#   BiocManager::install("Seurat")
+# library("Seurat")
+# if (!require("dplyr", quietly = TRUE))
+#   install.packages("dplyr")
+# library("dplyr")
+# if (!require("patchwork", quietly = TRUE))
+#   BiocManager::install("patchwork")
+# library("patchwork")
+# if (!require("Matrix", quietly = TRUE))
+#   BiocManager::install("h")
+# library("Matrix")
+# if (!require("ggplot2", quietly = TRUE))
+#   BiocManager::install("ggplot2")
+library("ggplot2")
+
+library(anndata)
+library(Matrix)
+library(data.table)
+library(sva)
+library(Seurat)
+library(pheatmap)
+library(here)
+library(jsonlite)
+library(fs)
+library(glue)
+
+library(RColorBrewer) # Define a Brewer palette 
+palette_patient <- brewer.pal(n = 8, name = "Accent")
+palette_label <- c( "invasive cancer" = "red", "cancer in situ" = "orange", "immune infiltrate" = "yellow", "breast glands" = "green", "connective tissue" = "blue", "adipose tissue" = "cyan", "undetermined" = "lightgrey" )
+```
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+rds_file <- here("results", "molecular", "gene_embeddings_HER2.rds")
+source(here("digitalhistopathology", "molecular_helpers.R"))
+setwd("./")
+Sys.setenv(R_USER = "/./")
+
+
+
+
+  # Function to create a pseudobulk profile by summing counts
+create_pseudobulk <- function(obj) {
+  pseudobulk <- Matrix::rowSums(obj@assays$RNA$counts)
+  return(pseudobulk)
+}
+    
+# Check if the RDS file exists 
+if (file.exists(rds_file)) { 
+  # Read the Seurat object from the RDS file 
+  seurat_object <- readRDS(rds_file) 
+  cat("Seurat object loaded from", rds_file, "\n") 
+    # Apply the function to each patient and store the results in a list
+  seurat_list <- SplitObject(seurat_object, split.by = "patient")
+  pseudobulk_list <- lapply(seurat_list, create_pseudobulk)
+  pseudobulk_list_log <- lapply(pseudobulk_list, function(x) log2(x + 1))
+  # multidensity(pseudobulk_list_log,las=1,xlab="# genes per spots",ylab="density",col=palette_patient,main="",leg=FALSE, xlim=c(-2,10))
+  
+  
+  par(mfrow = c(2, 4)) # Adjust the layout to fit all plots (example: 2 rows and 4 columns)
+  for (i in seq_along(pseudobulk_list_log)) { 
+    pseudobulk_log <- pseudobulk_list_log[[i]] 
+    
+    pseudobulk_log <- pseudobulk_log[pseudobulk_log > 0]
+    # Fit a bimodal distribution 
+    bimdens <- mclust::densityMclust(data = pseudobulk_log, G = 2, plot = FALSE) 
+    # Identify the limit that discriminates foreground from background 
+    lim <- qnorm(0.99, mean = bimdens$parameters$mean[1], sd = sqrt(bimdens$parameters$variance$sigmasq[1])) # Store the limit 
+
+  # Check if the patient is 'H' and set the limit to 2 if true 
+    if (names(pseudobulk_list_log)[i] == 'H') { lim <- 2 }
+    
+    # Plot the density 
+    plot(density(pseudobulk_log), main = names(pseudobulk_list_log)[i], xlab = "log2(# genes per spots + 1)", ylab = "Density", col = palette_patient[i]) 
+    # Add the vertical line for the limit 
+    abline(v = lim, col = "black", lwd = 2.5) 
+
+  } 
+  } else { 
+  # Create a new Seurat object 
+  # Read the .csv file
+    csv_file <- here("results", "molecular", "gene_embedding_HER2.csv")
+    m <- read.csv(csv_file, row.names="index")
+    # Read the metadata
+    spots_metadata_file <- here("results", "molecular", "spots_metadata.csv") 
+    spots_metadata <- read.csv(spots_metadata_file, row.names="index")
+    
+    rownames(m) <- gsub("_", "-", rownames(m))
+    rownames(spots_metadata) <- gsub("_", "-", rownames(spots_metadata))
+    
+    # Create the Seurat object
+    seurat_object <- CreateSeuratObject(counts = t(m), meta.data = spots_metadata)
+    seurat_object$patient <- substr(seurat_object$name_origin, 1, 1)
+    
+    # Primary cleaning
+    # Sum the counts for each cell 
+    total_counts_per_cell <- colSums(seurat_object@assays$RNA$counts) 
+    # Identify cells with zero counts 
+    cells_to_keep <- total_counts_per_cell > 0 
+    # Filter out cells with zero counts 
+    seurat_object <- seurat_object[, cells_to_keep]
+    
+    # Remove patient A
+    seurat_object <- seurat_object[ , rownames(seurat_object@meta.data)[seurat_object@meta.data$patient != "A"]]
+    
+  cell_counts_per_patient <- table(seurat_object@meta.data$patient)
+  print("Before filtering")
+  print(cell_counts_per_patient)
+    
+    # Apply the function to each patient and store the results in a list
+    seurat_list <- SplitObject(seurat_object, split.by = "patient")
+    pseudobulk_list <- lapply(seurat_list, create_pseudobulk)
+    pseudobulk_list_log <- lapply(pseudobulk_list, function(x) log2(x + 1))
+    # multidensity(pseudobulk_list_log,las=1,xlab="# genes per spots",ylab="density",col=palette_patient,main="",leg=FALSE, xlim=c(-2,10))
+    
+    pdf("filtering_plot.pdf")
+    par(mfrow = c(2, 4)) # Adjust the layout to fit all plots (example: 2 rows and 4 columns)
+    limits <- list()
+    genes_above_limit <- list()
+    for (i in seq_along(pseudobulk_list_log)) { 
+      pseudobulk_log <- pseudobulk_list_log[[i]] 
+      
+      pseudobulk_log <- pseudobulk_log[pseudobulk_log > 0]
+      # Fit a bimodal distribution 
+      bimdens <- mclust::densityMclust(data = pseudobulk_log, G = 2, plot = FALSE) 
+      # Identify the limit that discriminates foreground from background 
+      lim <- qnorm(0.99, mean = bimdens$parameters$mean[1], sd = sqrt(bimdens$parameters$variance$sigmasq[1])) # Store the limit 
+      limits[[names(pseudobulk_list_log)[i]]] <- lim 
+      
+    # Check if the patient is 'H' and set the limit to 2 if true 
+      if (names(pseudobulk_list_log)[i] == 'H') { lim <- 2 }
+      
+      
+    
+      # Plot the density 
+      plot(density(pseudobulk_log), main = names(pseudobulk_list_log)[i], xlab = "log2(# genes per spots + 1)", ylab = "Density", col = palette_patient[i]) 
+      # Add the vertical line for the limit 
+      abline(v = lim, col = "black", lwd = 2.5) 
+      genes_above_limit[[names(pseudobulk_list_log)[i]]] <- names(pseudobulk_log)[pseudobulk_log > lim]
+      
+    }
+    
+    common_genes <- Reduce(intersect, genes_above_limit)
+    
+    seurat_object <- subset(seurat_object, features = common_genes)
+  
+    
+    seurat_object <- NormalizeData(seurat_object, assay = "RNA")
+    seurat_object <- FindVariableFeatures(seurat_object, assay = "RNA", selection.method = "vst", nfeatures = 19000)
+    seurat_object <- ScaleData(seurat_object, assay = "RNA")
+    
+    seurat_object <- RunPCA(seurat_object, assay = "RNA")
+    seurat_object <- RunUMAP(seurat_object, assay = "RNA", dims = 1:30)
+    
+    # Save the Seurat object to a file 
+    saveRDS(seurat_object, file = here("results", "molecular", "gene_embeddings_HER2.rds"))
+  
+    cat("Seurat object created and saved to", here("results", "molecular", "gene_embeddings_HER2.rds"), "\n") 
+    }
+
+
+```
+
+```{r}
+# Assuming seurat_object is your Seurat object
+rna_data <- seurat_object@assays$RNA$data
+
+# Write the RNA data to a CSV file
+write.csv(as.matrix(rna_data), file = here("results", "molecular", "filtered_normalized_gene_expression.csv"))
+```
+
+
+
+```{r}
+layout(matrix(ncol=2,nrow=1,c(1:2),byrow = TRUE))
+# Add number of genes per UMI for each cell to metadata
+seurat_object$log10GenesPerUMI <- log10(seurat_object$nFeature_RNA) / log10(seurat_object$nCount_RNA)
+#another notation: GE[["log10GenesPerUMI"]]        <- log10(GE$nFeature_RNA) / log10(GE$nCount_RNA)
+# Compute percent mito ratio
+seurat_object$mitoRatio        <- PercentageFeatureSet(object = seurat_object, pattern = "^MT-")/100
+#another notation: GE[["mitoRatio"]]        <- PercentageFeatureSet(object = GE, pattern = "^MT-")/100
+
+#Compare #genes versus UMI
+smoothScatter(seurat_object$nFeature_RNA,seurat_object$nCount_RNA,las=1,main="",xlab="# genes",ylab="# UMI")
+
+```
+
+```{r, fig.width=8, fig.height=8.5}
+seurat_object_labeled <- seurat_object[ , rownames(seurat_object@meta.data)[seurat_object@meta.data$label != ""]]
+seurat_object_labeled <- seurat_object_labeled[ , rownames(seurat_object_labeled@meta.data)[seurat_object_labeled@meta.data$label != "undetermined"]]
+# Set the identities in the Seurat object to your custom labels
+Idents(seurat_object_labeled) <- seurat_object_labeled@meta.data$label
+
+```
+
+```{r}
+res_true_labels <- print(get_clusters_DGE_BPs(seurat_object_labeled))
+
+res_true_labels_down <- get_clusters_DGE_BPs(seurat_object_labeled, upregulated = FALSE)
+```
+
+
+
+```{r}
+# 4. Plot the Biological Pathways
+
+# Ensure the plots are being displayed
+if (interactive()) {
+    for (cluster in names(res_true_labels$gprofiler_results)) {
+        print(plot_pathways(cluster, res_true_labels$gprofiler_results[[cluster]]))
+    }
+} else {
+    for (cluster in names(res_true_labels$gprofiler_results)) {
+        ggsave(filename = paste0("pathway_cluster_", cluster, ".png"), plot = plot_pathways(cluster, res_true_labels$gprofiler_results[[cluster]]), width = 10, height = 8)
+    }
+}
+
+```
+
+```{r}
+result_matrix <- get_pathway_scores_across_all_clusters(res = res_true_labels)
+
+result_matrix_down <- get_pathway_scores_across_all_clusters(res = res_true_labels_down)
+```
+
+
+```{r, fig.width=8, fig.height=12}
+heatmap_pathways(result_matrix = result_matrix, display_numbers = TRUE, name = "_upregulated")
+heatmap_pathways(result_matrix = result_matrix_down, display_numbers = TRUE, name = "_downregulated")
+
+```
+
+```{r}
+## Extract genes related to regulation of RNA splicing
+
+significant_pathway <- res_true_labels$gprofiler_results$`invasive cancer`[res_true_labels$gprofiler_results$`invasive cancer`$term_name == "regulation of RNA splicing", ]
+
+genes <- retrieve_genes_from_GO_term(significant_pathway$term_id)
+gene_list <- unlist(strsplit(genes, ";"))
+
+markers_invasive <- res_true_labels$markers[res_true_labels$markers$cluster == "invasive cancer",]
+markers <- markers_invasive[gene_list,]
+sorted_markers <- markers[order(markers$avg_log2FC, decreasing = TRUE), ]
+cleaned_markers <- sorted_markers[!is.na(sorted_markers$avg_log2FC), ]
+```
+
+## Look at the invasive cancer clusters
+
+```{r}
+# Load the config file
+
+# Define here the model you want to check
+# models <- c("uni", "uni_full_koleo_16384_prototypes")
+models <- c("uni", "uni_full_koleo_16384_prototypes", "uni_full_koleo_32768_prototypes", "uni_full_kde_32768_prototypes")
+# models <- c("uni_full_kde_4096_prototypes",
+#              "uni_full_kde_8192_prototypes",
+#              "uni_full_kde_16384_prototypes",
+#              "uni_full_kde_65536_prototypes",
+#              "uni_full_koleo_4096_prototypes",
+#              "uni_full_koleo_8192_prototypes",
+#              "uni_full_koleo_65536_prototypes")
+
+
+config <- fromJSON(here("config", "config_notebooks.json"))
+
+benchmark_folders <- c()
+
+for (m in models)  {
+  if (m %in% config$retrained_model_list1) {
+    relative_path <- sub("^\\.\\./", "", config$retrained_benchmark_folder1)
+    benchmark_folder <- here(relative_path)
+  } else {
+    relative_path <- sub("^\\.\\./", "", config$retrained_benchmark_folder2)
+    benchmark_folder = here(relative_path)
+  }
+  benchmark_folders <- c(benchmark_folders, benchmark_folder)
+}
+
+files <- c()
+for (i in seq_along(models)) {
+  model <- models[i]
+  folder <- benchmark_folders[i]
+  
+  # Build path to opti_clusters.csv
+  path_opti_clusters <- fs::path(folder, "invasive_cancer_clustering", 
+                                  config$invasive_cancer_clustering_algo, "optimal_clusters.csv")
+  
+  # Read the CSV
+  opti_clusters <- read.csv(path_opti_clusters)
+  
+  # Extract number of clusters for the current model
+  # Assuming the first column contains the model names
+  n <- opti_clusters$n_clusters[opti_clusters[[1]] == model]
+  
+  # Directory to search for label files
+  label_dir <- fs::path(folder, "invasive_cancer_clustering", 
+                        config$invasive_cancer_clustering_algo, model)
+  
+  # Build the pattern with the current value of `n`
+  pattern <- glue("invasive_labels_{n}_clusters_umap.*\\.csv$")
+  
+  # Find matching files
+  path_labels <- dir(label_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(path_labels) > 1) {
+    warning(glue("More than one file found for model {model}"))
+  }
+  
+  # Take the first matching file
+  path_label <- path_labels[1]
+  
+  files <- c(files, path_label)
+}
+
+```
+
+
+```{r}
+
+get_pathways_heatmaps <- function(labels_clusters_uni_file, seurat_object, res_true_labels, upregulated = TRUE, add_name = "") {
+  directory_name <- dirname(labels_clusters_uni_file)
+  
+  if (upregulated == TRUE){
+    name = paste0("upregulated", add_name)
+  } else {
+    name = paste0("downregulated", add_name)
+  }
+  
+  # Define file paths
+  file_with_true_labels <- paste0(directory_name, "/", name, "_result_matrix_with_true_labels.csv")
+  file_no_labels <- paste0(directory_name, "/", name, "_result_matrix_no_labels.csv")
+  
+  # Check if files already exist
+  if (file.exists(file_with_true_labels) && file.exists(file_no_labels)) {
+    result_matrix_true_labels <- read.csv(file_with_true_labels, row.names = 1)
+    result_matrix <- read.csv(file_no_labels, row.names = 1)
+  } else {
+    seurat_object_predicted <- format_seurat_with_predicted_csv(seurat_object = seurat_object, path_to_predicted_clusters = labels_clusters_uni_file)
+    # Upregulated pathways
+    res <- get_clusters_DGE_BPs(seurat_object = seurat_object_predicted, upregulated = upregulated)
+    # With true labels
+    result_matrix_true_labels <- get_pathway_scores_across_all_clusters(res = res, res_true_labels = res_true_labels)
+    # Without numbers
+    heatmap_pathways(result_matrix_true_labels, display_numbers = FALSE, directory_name = directory_name, name = paste0("_", name, "_with_true_labels"))
+    # With numbers
+    heatmap_pathways(result_matrix_true_labels, display_numbers = TRUE, directory_name = directory_name, name = paste0("_", name, "_with_true_labels_with_numbers"))
+    
+    # Without true labels
+    result_matrix <- get_pathway_scores_across_all_clusters(res = res)
+    # Without numbers
+    heatmap_pathways(result_matrix, display_numbers = FALSE, directory_name = directory_name, name = paste0("_", name, "_no_labels"))
+    # With numbers
+    heatmap_pathways(result_matrix, display_numbers = TRUE, directory_name = directory_name, name = paste0("_", name, "_no_labels_with_numbers"))
+    
+    # Save results to CSV
+    write.csv(result_matrix_true_labels, file_with_true_labels)
+    write.csv(result_matrix, file_no_labels)
+  }
+  
+  return(list(result_matrix_true_labels = result_matrix_true_labels, result_matrix = result_matrix))
+}
+
+
+
+```{r}
+# Initialize an empty list to store results
+results_upregulated <- list()
+results_downregulated <- list()
+
+# Apply the function to each file and store the results in the list
+for (file in files) {
+  n <- gsub(".*labels_(\\d+)_clusters.*", "\\1", file)
+  results_upregulated[[file]] <- get_pathways_heatmaps(labels_clusters_uni_file = file, seurat_object = seurat_object, res_true_labels = res_true_labels, upregulated = TRUE, add_name = paste0("_", n, "_clusters"))
+  results_downregulated[[file]] <- get_pathways_heatmaps(labels_clusters_uni_file = file, seurat_object = seurat_object, res_true_labels = res_true_labels_down, upregulated = FALSE, add_name = paste0("_", n, "_clusters"))
+}
+```
+
+
+## Extract genes relevant for full koleo 16384
+
+```{r}
+# labels_clusters_uni_file <- "../benchmark/her2_final_without_A/uni_full_models/invasive_cancer_clustering/kmeans/uni_full_koleo_16384_prototypes/invasive_labels_5_clusters_umap_min_dist_0.001_n_neighbors_250.csv"
+labels_clusters_uni_file <- "../results/benchmark/her2_final_without_A/uni_full_models_batch25/invasive_cancer_clustering/kmeans/uni_full_koleo_16384/invasive_labels_*_umap_*.csv"
+directory_name <- dirname(labels_clusters_uni_file)
+
+seurat_object_predicted <- format_seurat_with_predicted_csv(seurat_object = seurat_object, path_to_predicted_clusters = labels_clusters_uni_file)
+
+markers_uni_full_koleo_16384_prototypes <- FindAllMarkers(seurat_object_predicted, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0, latent.vars = "patient", test.use='MAST', return.thresh = 0.001)
+
+write.csv(markers_uni_full_koleo_16384_prototypes, paste0(directory_name, "/", "markers_uni_full_koleo_16384_prototypes.csv"))
+
+```
+
+```{r}
+# Upregulated pathways
+res <- get_clusters_DGE_BPs(seurat_object = seurat_object_predicted, upregulated = TRUE)
+
+significant_pathway <- res$gprofiler_results$'0'[res$gprofiler_results$'0'$term_name == "negative regulation of apoptotic signaling pathway", ]
+
+genes <- retrieve_genes_from_GO_term(significant_pathway$term_id)
+gene_list <- unlist(strsplit(genes, ";"))
+
+markers_invasive <- res$markers[res$markers$cluster == "0",]
+markers <- markers_invasive[gene_list,]
+sorted_markers <- markers[order(markers$avg_log2FC, decreasing = TRUE), ]
+cleaned_markers <- sorted_markers[!is.na(sorted_markers$avg_log2FC), ]
+write.csv(cleaned_markers$gene, paste0(directory_name, "/", "negative_regulation_of_apoptotic_signaling_pathway.csv"))
+```
+```{r}
+cluster_0_vs_2_markers <- FindMarkers(seurat_object_predicted, ident.1 = 0, ident.2 = 2, )
+
+# Filter upregulated genes in cluster "0"
+upregulated_in_cluster_0 <- cluster_0_vs_2_markers[cluster_0_vs_2_markers$avg_log2FC > 0.75, ]
+write.csv(upregulated_in_cluster_0, paste0(directory_name, "/", "upregulated_in_0_vs_2_logfc075.csv"))
+
+# Filter upregulated genes in cluster "2"
+upregulated_in_cluster_2 <- cluster_0_vs_2_markers[cluster_0_vs_2_markers$avg_log2FC < -0.75, ]
+write.csv(upregulated_in_cluster_2, paste0(directory_name, "/", "upregulated_in_2_vs_0_logfc075.csv"))
+```
+```{r}
+# Assuming cluster_0_vs_2_markers is your data frame with the results
+# Add a column for significance
+cluster_0_vs_2_markers$significance <- "Not Significant"
+cluster_0_vs_2_markers$significance[cluster_0_vs_2_markers$avg_log2FC > 0.75 & cluster_0_vs_2_markers$p_val_adj < 0.05] <- "Upregulated"
+cluster_0_vs_2_markers$significance[cluster_0_vs_2_markers$avg_log2FC < -0.75 & cluster_0_vs_2_markers$p_val_adj < 0.05] <- "Downregulated"
+
+# Create the volcano plot
+volcano_plot <- ggplot(cluster_0_vs_2_markers, aes(x = avg_log2FC, y = -log10(p_val_adj), color = significance)) +
+  geom_point(alpha = 0.8, size = 1) +
+  scale_color_manual(values = c("Not Significant" = "grey", "Upregulated" = "red", "Downregulated" = "blue")) +
+  theme_minimal() +
+  labs(title = "Volcano Plot", x = "Log2 Fold Change", y = "-Log10 Adjusted P-value") +
+  theme(legend.title = element_blank())
+
+# Save the plot
+ggsave(paste0(directory_name, "/", "volcano_plot.png"), plot = volcano_plot)
+
+# Display the plot
+print(volcano_plot)
+
+```
+```{r}
+# labels_clusters_uni_file <- "../benchmark/her2_final_without_A/uni_full_models/invasive_cancer_clustering/kmeans/uni/invasive_labels_7_clusters_umap_min_dist_0.001_n_neighbors_10.csv"
+labels_clusters_uni_file <- "../results/benchmark/her2_final_without_A/uni_full_models_batch25/invasive_cancer_clustering/kmeans/uni/invasive_labels_*_umap_*.csv"
+
+directory_name <- dirname(labels_clusters_uni_file)
+
+seurat_object_predicted <- format_seurat_with_predicted_csv(seurat_object = seurat_object, path_to_predicted_clusters = labels_clusters_uni_file)
+
+cluster_0_vs_2_markers <- FindMarkers(seurat_object_predicted, ident.1 = 0, ident.2 = 2, )
+
+# Filter upregulated genes in cluster "0"
+upregulated_in_cluster_0 <- cluster_0_vs_2_markers[cluster_0_vs_2_markers$avg_log2FC > 0.75, ]
+write.csv(upregulated_in_cluster_0, paste0(directory_name, "/", "upregulated_in_0_vs_2_logfc075.csv"))
+
+# Filter upregulated genes in cluster "2"
+upregulated_in_cluster_2 <- cluster_0_vs_2_markers[cluster_0_vs_2_markers$avg_log2FC < -0.75, ]
+write.csv(upregulated_in_cluster_2, paste0(directory_name, "/", "upregulated_in_2_vs_0_logfc075.csv"))
+
+cluster_0_vs_2_markers$significance <- "Not Significant"
+cluster_0_vs_2_markers$significance[cluster_0_vs_2_markers$avg_log2FC > 0.75 & cluster_0_vs_2_markers$p_val_adj < 0.05] <- "Upregulated"
+cluster_0_vs_2_markers$significance[cluster_0_vs_2_markers$avg_log2FC < -0.75 & cluster_0_vs_2_markers$p_val_adj < 0.05] <- "Downregulated"
+
+# Create the volcano plot
+volcano_plot <- ggplot(cluster_0_vs_2_markers, aes(x = avg_log2FC, y = -log10(p_val_adj), color = significance)) +
+  geom_point(alpha = 0.8, size = 1) +
+  scale_color_manual(values = c("Not Significant" = "grey", "Upregulated" = "red", "Downregulated" = "blue")) +
+  theme_minimal() +
+  labs(title = "Volcano Plot", x = "Log2 Fold Change", y = "-Log10 Adjusted P-value") +
+  theme(legend.title = element_blank())
+
+# Save the plot
+ggsave(paste0(directory_name, "/", "volcano_plot.png"), plot = volcano_plot)
+
+# Display the plot
+print(volcano_plot)
+```
+```{r}
+markers_uni <- FindAllMarkers(seurat_object_predicted, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0, latent.vars = "patient", test.use='MAST')
+                               # return.thresh = 0.001)
+
+```
+```{r}
+write.csv(markers_uni, paste0(directory_name, "/", "markers_uni.csv"))
+```
+
+
+```{r}
+redundant_pathways <- c("positive regulation of viral process", "secondary alcohol biosynthetic process", "sterol metabolic process", "secondary alcohol metabolic process", 
+                        "cellular respiration", "nucleoside triphosphate metabolic process",
+                        "transforming growth factor beta receptor signaling pathway", 
+                        "cell-substrate junction assembly", "substrate adhesion-dependent cell spreading", "negative regulation of vasculature development", "B cell mediated immunity", "complement activation", "negative regulation of angiogenesis", 
+                        "cellular response to transforming growth factor beta stimulus", 
+                        "immunoglobulin mediated immune response", 
+                        "superoxide anion generation", 
+                        "reactive oxygen species metabolic process")
+result_matrix_true_labels <- result_matrix_true_labels[!(rownames(result_matrix_true_labels) %in% redundant_pathways), ]
+
+heatmap_pathways(result_matrix_true_labels, display_numbers = FALSE, directory_name = directory_name, name = "_upregulated_with_true_labels_curated")
+# save_dge_pathways_analysis_per_clusters(res = res, directory_name = directory_name, add_name = "_upregulated_with_true_labels")
+
+heatmap_pathways(result_matrix_true_labels, display_numbers = TRUE, directory_name = directory_name, name = "_upregulated_with_true_labels_with_numbers_curated")
+# save_dge_pathways_analysis_per_clusters(res = res, directory_name = directory_name, add_name = "_upregulated_with_true_labels")
+```
+
+
+
+```{r}
+library(GOSemSim)
+library(rrvgo)
+library(pRoloc)
+library(org.Hs.eg.db)
+
+go_descriptions <- rownames(result_matrix)
+# Convert GO term descriptions to GO IDs
+go_ids <- goTermToId(go_descriptions, names = TRUE, keepNA = TRUE)
+
+# Print the converted GO IDs
+print(go_ids)
+
+# Load GO data
+go_data <- godata('org.Hs.eg.db', ont="BP")
+
+# Compute semantic similarity matrix
+sim_matrix <- GOSemSim::mgoSim(go_ids, go_ids, semData = go_data, measure = "Wang")
+
+# Example scores (you can replace this with actual scores from your matrix)
+scores <- result_matrix[, 1]  # Assuming the first column has the scores
+
+# Reduce redundancy using the scores
+reduced_terms <- rrvgo::reduceSimMatrix(sim_matrix, threshold = 0.7, scores = scores)
+
+# View the reduced terms
+print(reduced_terms)
+```
+

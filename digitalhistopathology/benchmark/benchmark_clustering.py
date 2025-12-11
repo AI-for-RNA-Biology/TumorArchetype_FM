@@ -37,8 +37,8 @@ class BenchmarkClustering(BenchmarkBase):
                  engineered_features_type='scMTOP',
                  extension='png',
                  group='tumor',
-                 label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
-                 algo='kmeans'):
+                 algo='kmeans',
+                 dataset="HER2"):
         
         super().__init__(path_to_pipeline=path_to_pipeline, 
                          pipelines_list=pipelines_list, 
@@ -51,7 +51,7 @@ class BenchmarkClustering(BenchmarkBase):
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files)        
+                         dataset=dataset)        
 
         self.algo = algo
 
@@ -66,6 +66,7 @@ class BenchmarkClustering(BenchmarkBase):
                                           center_before_svd=False,
                                           scale_before_svd=False,
                                           multiply_by_variance=False,
+                                          clustering_name='raw',
                                           **kwargs):
         """ 
         Run unsupervised clustering on the image embeddings and handcrafted features.
@@ -83,50 +84,74 @@ class BenchmarkClustering(BenchmarkBase):
 
 
         for model in self.pipelines_list:
-            print(f"Computing unsupervised clustering for model {model}, obsm {obsm}", flush=True)
-            if "label" not in self.image_embeddings[model].emb.obs:
-                print(f"Adding label to the embeddings of {model}...", flush=True)
-                self.image_embeddings[model].add_label()
-            # self.image_embeddings[model].emb.obs.replace("nan", np.nan, inplace=True)
-            unsupervised_clustering_results[model] = self.image_embeddings[model].unsupervised_clustering_per_sample(n_clusters=n_clusters, 
-                                                                                                                     sample='name_origin',
-                                                                                                                     obsm=obsm, 
-                                                                                                                     layer=layer, 
-                                                                                                                     recompute_dim_red_on_subset=recompute_dim_red_on_subset,
-                                                                                                                     var_ratio_threshold_for_svd=var_ratio_threshold_for_svd,
-                                                                                                                     u_comp_list=u_comp_list,
-                                                                                                                     center_before_svd=center_before_svd,
-                                                                                                                     scale_before_svd=scale_before_svd,
-                                                                                                                     algo=self.algo,
-                                                                                                                     multiply_by_variance=multiply_by_variance,
-                                                                                                                     filter_label=False,
-                                                                                                                     **kwargs)
-            unsupervised_clustering_results[model][f'ARI_{self.group}'] = adjusted_rand_score(self.image_embeddings[model].emb.obs['tumor'], 
-                                                                                              self.image_embeddings[model].emb.obs['predicted_label'])
-        
+            
+            if os.path.exists(os.path.join(self.saving_folder, f'{clustering_name}_clustering_results_{model}.json')):
+                print(f"Loading unsupervised clustering results for model {model}...", flush=True)
+                with open(os.path.join(self.saving_folder, f'{clustering_name}_clustering_results_{model}.json'), 'r') as f:
+                    unsupervised_clustering_results[model] = json.load(f)[model]
+                                    
+            else:
+            
 
+                print(f"Computing {clustering_name} clustering for model {model}, obsm {obsm}", flush=True)
+                if "label" not in self.image_embeddings[model].emb.obs:
+                    print(f"Adding label to the embeddings of {model}...", flush=True)
+                    self.image_embeddings[model].add_label()
+                # self.image_embeddings[model].emb.obs.replace("nan", np.nan, inplace=True)
+                unsupervised_clustering_results[model] = self.image_embeddings[model].unsupervised_clustering_per_sample(n_clusters=n_clusters, 
+                                                                                                                        sample='name_origin',
+                                                                                                                        obsm=obsm, 
+                                                                                                                        layer=layer, 
+                                                                                                                        recompute_dim_red_on_subset=recompute_dim_red_on_subset,
+                                                                                                                        var_ratio_threshold_for_svd=var_ratio_threshold_for_svd,
+                                                                                                                        u_comp_list=u_comp_list,
+                                                                                                                        center_before_svd=center_before_svd,
+                                                                                                                        scale_before_svd=scale_before_svd,
+                                                                                                                        algo=self.algo,
+                                                                                                                        multiply_by_variance=multiply_by_variance,
+                                                                                                                        filter_label=False,
+                                                                                                                        **kwargs)
+                
+                
+                unsupervised_clustering_results[model][f'ARI_{self.group}'] = adjusted_rand_score(self.image_embeddings[model].emb.obs['tumor'], 
+                                                                                                self.image_embeddings[model].emb.obs['predicted_label'])
+            
+                with open(os.path.join(self.saving_folder, f'{clustering_name}_clustering_results_{model}.json'), 'w') as f:
+                    json.dump({model: unsupervised_clustering_results[model]}, f, indent=4)
         # For handcrafted features
-        if "label" not in self.ef.emb.obs:
-            self.ef.add_label()
+        if self.ef is not None:
+            
+            if os.path.exists(os.path.join(self.saving_folder, f'{clustering_name}_clustering_results_handcrafted_features.json')):
+                print(f"Loading {clustering_name} clustering results for handcrafted features...", flush=True)
+                with open(os.path.join(self.saving_folder, f'{clustering_name}_clustering_results_handcrafted_features.json'), 'r') as f:
+                    unsupervised_clustering_results['handcrafted_features'] = json.load(f)['handcrafted_features']
+            else:
+                if "label" not in self.ef.emb.obs:
+                    self.ef.add_label()
 
 
-        unsupervised_clustering_results['handcrafted_features'] = self.ef.unsupervised_clustering_per_sample(n_clusters=n_clusters, 
-                                                                                                             sample='name_origin',
-                                                                                                             obsm=obsm, 
-                                                                                                             layer=layer, 
-                                                                                                             recompute_dim_red_on_subset=recompute_dim_red_on_subset,
-                                                                                                             var_ratio_threshold_for_svd=var_ratio_threshold_for_svd,
-                                                                                                             u_comp_list=u_comp_list,
-                                                                                                             center_before_svd=center_before_svd,
-                                                                                                             scale_before_svd=scale_before_svd,
-                                                                                                             algo=self.algo,
-                                                                                                             multiply_by_variance=multiply_by_variance,
-                                                                                                             filter_label=False,
-                                                                                                             **kwargs)
-        
-        unsupervised_clustering_results['handcrafted_features'][f'ARI_{self.group}'] = adjusted_rand_score(self.ef.emb.obs['tumor'],
-                                                                                                            self.ef.emb.obs['predicted_label'])
-    
+                unsupervised_clustering_results['handcrafted_features'] = self.ef.unsupervised_clustering_per_sample(n_clusters=n_clusters, 
+                                                                                                                    sample='name_origin',
+                                                                                                                    obsm=obsm, 
+                                                                                                                    layer=layer, 
+                                                                                                                    recompute_dim_red_on_subset=recompute_dim_red_on_subset,
+                                                                                                                    var_ratio_threshold_for_svd=var_ratio_threshold_for_svd,
+                                                                                                                    u_comp_list=u_comp_list,
+                                                                                                                    center_before_svd=center_before_svd,
+                                                                                                                    scale_before_svd=scale_before_svd,
+                                                                                                                    algo=self.algo,
+                                                                                                                    multiply_by_variance=multiply_by_variance,
+                                                                                                                    filter_label=False,
+                                                                                                                    **kwargs)
+                
+
+                
+                unsupervised_clustering_results['handcrafted_features'][f'ARI_{self.group}'] = adjusted_rand_score(self.ef.emb.obs['tumor'],
+                                                                                                                    self.ef.emb.obs['predicted_label'])
+                
+                with open(os.path.join(self.saving_folder, f'{clustering_name}_clustering_results_handcrafted_features.json'), 'w') as f:
+                    json.dump({'handcrafted_features': unsupervised_clustering_results['handcrafted_features']}, f, indent=4)
+            
         return unsupervised_clustering_results
 
 
@@ -160,14 +185,16 @@ class BenchmarkClustering(BenchmarkBase):
                 self.image_embeddings[model].compute_umap(n_neighbors=best_ari_umap['params']['n_neighbors'],
                                                             min_dist=best_ari_umap['params']['min_dist'])
             
-            if os.path.exists(os.path.join(self.saving_folder, f'best_umap_ari_model_handcrafted_features_all.json')):
-                with open(os.path.join(self.saving_folder, f'best_umap_ari_model_handcrafted_features_all.json'), 'r') as f:
-                    best_ari_umap = json.load(f)
-            else:
-                raise NotImplementedError(f"First compute the best UMAP parameters for handcrafted features.")
-            
-            self.ef.compute_umap(n_neighbors=best_ari_umap['params']['n_neighbors'],
-                                min_dist=best_ari_umap['params']['min_dist'])
+            if self.ef is not None:
+
+                if os.path.exists(os.path.join(self.saving_folder, f'best_umap_ari_model_handcrafted_features_all.json')):
+                    with open(os.path.join(self.saving_folder, f'best_umap_ari_model_handcrafted_features_all.json'), 'r') as f:
+                        best_ari_umap = json.load(f)
+                else:
+                    raise NotImplementedError(f"First compute the best UMAP parameters for handcrafted features.")
+                
+                self.ef.compute_umap(n_neighbors=best_ari_umap['params']['n_neighbors'],
+                                    min_dist=best_ari_umap['params']['min_dist'])
             
 
             
@@ -228,8 +255,10 @@ class BenchmarkClustering(BenchmarkBase):
             embeddings = list(self.image_embeddings.values())
             models = list(self.image_embeddings.keys())
             add_filename = ""
-            embeddings.append(self.ef)
-            models.append('handcrafted_features')
+            
+            if self.ef is not None:
+                embeddings.append(self.ef)
+                models.append('handcrafted_features')
 
 
         for model, embedding in zip(models, embeddings):
@@ -238,15 +267,35 @@ class BenchmarkClustering(BenchmarkBase):
                 embedding.emb.obs['label'] = embedding.emb.obs['label'].replace(np.nan, 'nan')
 
             if hue == 'predicted_label':
-                r = embedding.unsupervised_clustering(n_clusters=6, obsm='umap', algo=self.algo)
+                n_tissues = len([label for label in embedding.emb.obs['label'].unique() if label not in ['nan', 'undetermined', np.nan]])
+                
+                # Note: here, for HER2, there was an error and n_clusters was at 6 instead of 7.
+                r = embedding.unsupervised_clustering(n_clusters=n_tissues, obsm='umap', algo=self.algo)
                 ARI = f"{r['ari']:.2f}"
                 add_title = f" - ARI: {ARI}"
                 
+                
             if hue == 'tumor':
-                r = embedding.unsupervised_clustering(n_clusters=6, obsm='umap', algo=self.algo)
-                ARI_patient = adjusted_rand_score(embedding.emb.obs['tumor'], embedding.emb.obs['predicted_label'])
+                # number of patients
+                n_patients = embedding.emb.obs['tumor'].nunique()
+
+                if n_patients <= 10:
+                    r = embedding.unsupervised_clustering(n_clusters=n_patients, obsm='umap', algo=self.algo)
+                    ARI_patient = adjusted_rand_score(embedding.emb.obs['tumor'], embedding.emb.obs['predicted_label'])
+                else:
+                    aris_bootstrapped = []
+                    if n_patients > 10:
+                        r = embedding.unsupervised_clustering(n_clusters=10, obsm='umap', algo=self.algo)
+                        for i in range(20):
+                            random_patients = np.random.choice(embedding.emb.obs['tumor'].unique(), size=10, replace=False)
+                            sub_emb = embedding.emb[embedding.emb.obs['tumor'].isin(random_patients)]
+                            ari = adjusted_rand_score(sub_emb.obs['tumor'], sub_emb.obs['predicted_label'])
+                            aris_bootstrapped.append(ari)
+                        ARI_patient = np.mean(aris_bootstrapped)
+                        
                 add_title = f" - patient ARI (batch): {ARI_patient:.2f}"
-            
+                
+
             
             plt.figure(figsize=(10,10))
             sns.scatterplot(x=embedding.emb.obsm['umap'][:,0],
@@ -267,117 +316,293 @@ class BenchmarkClustering(BenchmarkBase):
             plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_colored_by_{hue}.{self.extension}"), bbox_inches='tight')
 
 
+    def UMAP_best_params_clustering_many_patients_batch_old(self, 
+                                                          annotated_only=False, 
+                                                          palette=None,
+                                                          n_patients=10):
+
+        add_title = ""
+
+        if annotated_only:
+            embeddings = list(self.annotated_embeddings.values())
+            models = list(self.annotated_embeddings.keys())
+            add_filename = "_annotated_only"
+
+        else:
+            embeddings = list(self.image_embeddings.values())
+            models = list(self.image_embeddings.keys())
+            add_filename = ""
+            
+            if self.ef is not None:
+                embeddings.append(self.ef)
+                models.append('handcrafted_features')
+
+        boostraped_ARI_patients = {}
+        for model, embedding in zip(models, embeddings):
+            
+            if os.path.exists(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json')):
+                print(f"Loading boostraped ARI for model {model}...", flush=True)
+                with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json'), 'r') as f:
+                    boostraped_ARI_patients[model] = json.load(f)[model]
+            else:
+                all_patients = embedding.emb.obs['tumor'].unique()
+
+                boostraped_ARI_patients[model] = []
+                for i in range(20):
+                    patients = np.random.choice(all_patients, size=n_patients, replace=False)
+                    subset_emb = Embedding()
+                    subset_emb.emb = embedding.emb[embedding.emb.obs['tumor'].isin(patients)].copy()
+                    r = subset_emb.unsupervised_clustering(n_clusters=n_patients, obsm='umap', algo=self.algo)
+                    ARI_patient = adjusted_rand_score(subset_emb.emb.obs['tumor'], subset_emb.emb.obs['predicted_label'])
+                    add_title = f" - patient ARI (batch): {ARI_patient:.2f} - random {len(patients)} patients - round {i+1}"
+                    boostraped_ARI_patients[model].append(ARI_patient)
+                
+                    plt.figure(figsize=(10,10))
+                    sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                    y=subset_emb.emb.obsm['umap'][:,1],
+                                    hue=subset_emb.emb.obs['tumor'],
+                                    palette=palette)
+                    sns.despine()
+                    plt.title(f"UMAP - {model} - colored by tumor -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                    plt.savefig(os.path.join(self.saving_folder, f"UMAP_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_tumor.{self.extension}"), bbox_inches='tight')
+                    
+                    plt.figure(figsize=(10,10))
+                    sns.kdeplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                    y=subset_emb.emb.obsm['umap'][:,1],
+                                    hue=subset_emb.emb.obs['tumor'],
+                                    palette=palette)
+                    sns.despine()
+                    plt.title(f"UMAP - {model} - colored by tumor -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                    plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_tumor.{self.extension}"), bbox_inches='tight')
+                
+                    plt.figure(figsize=(10,10))
+                    subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
+                    subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+                    sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                    y=subset_emb.emb.obsm['umap'][:,1],
+                                    hue=subset_emb.emb.obs['label'],
+                                    palette=self.dataset.PALETTE)
+                    sns.despine()
+                    plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                    plt.savefig(os.path.join(self.saving_folder, f"UMAP_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
+
+                    plt.figure(figsize=(10,10))
+                    sns.kdeplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                    y=subset_emb.emb.obsm['umap'][:,1],
+                                    hue=subset_emb.emb.obs['label'],
+                                    palette=self.dataset.PALETTE)
+                    sns.despine()
+                    plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                    plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
+                
+                with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json'), 'w') as f:
+                    json.dump({model: boostraped_ARI_patients[model]}, f, indent=4)
+                
+        with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{n_patients}_patients{add_filename}.json'), 'w') as f:
+            json.dump(boostraped_ARI_patients, f, indent=4)
+
+    def UMAP_best_params_clustering_many_patients_batch(self, 
+                                                          annotated_only=False, 
+                                                          palette=None,
+                                                          n_patients=10):
+
+        add_title = ""
+
+        if annotated_only:
+            embeddings = list(self.annotated_embeddings.values())
+            models = list(self.annotated_embeddings.keys())
+            add_filename = "_annotated_only"
+
+        else:
+            embeddings = list(self.image_embeddings.values())
+            models = list(self.image_embeddings.keys())
+            add_filename = ""
+            
+            if self.ef is not None:
+                embeddings.append(self.ef)
+                models.append('handcrafted_features')
+
+        boostraped_ARI_patients = {}
+        for model, embedding in zip(models, embeddings):
+            
+            # if os.path.exists(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json')):
+            #     print(f"Loading boostraped ARI for model {model}...", flush=True)
+            #     with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json'), 'r') as f:
+            #         boostraped_ARI_patients[model] = json.load(f)[model]
+            # else:
+            all_patients = embedding.emb.obs['tumor'].unique()
+            embedding.unsupervised_clustering(n_clusters=n_patients, obsm='umap', algo=self.algo)
+            boostraped_ARI_patients[model] = []
+            for i in range(20):
+                patients = np.random.choice(all_patients, size=n_patients, replace=False)
+                subset_emb = Embedding()
+                subset_emb.emb = embedding.emb[embedding.emb.obs['tumor'].isin(patients)].copy()
+                # r = subset_emb.unsupervised_clustering(n_clusters=n_patients, obsm='umap', algo=self.algo)
+                ARI_patient = adjusted_rand_score(subset_emb.emb.obs['tumor'], subset_emb.emb.obs['predicted_label'])
+                add_title = f" - patient ARI (batch): {ARI_patient:.2f} - random {len(patients)} patients - round {i+1}"
+                boostraped_ARI_patients[model].append(ARI_patient)
+            
+                plt.figure(figsize=(10,10))
+                sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                y=subset_emb.emb.obsm['umap'][:,1],
+                                hue=subset_emb.emb.obs['tumor'],
+                                palette=palette)
+                sns.despine()
+                plt.title(f"UMAP - {model} - colored by tumor -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                plt.savefig(os.path.join(self.saving_folder, f"UMAP_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_tumor.{self.extension}"), bbox_inches='tight')
+                
+                plt.figure(figsize=(10,10))
+                sns.kdeplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                y=subset_emb.emb.obsm['umap'][:,1],
+                                hue=subset_emb.emb.obs['tumor'],
+                                palette=palette)
+                sns.despine()
+                plt.title(f"UMAP - {model} - colored by tumor -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_tumor.{self.extension}"), bbox_inches='tight')
+            
+                plt.figure(figsize=(10,10))
+                subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
+                subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+                sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                y=subset_emb.emb.obsm['umap'][:,1],
+                                hue=subset_emb.emb.obs['label'],
+                                palette=self.dataset.PALETTE)
+                sns.despine()
+                plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                plt.savefig(os.path.join(self.saving_folder, f"UMAP_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
+
+                plt.figure(figsize=(10,10))
+                sns.kdeplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                y=subset_emb.emb.obsm['umap'][:,1],
+                                hue=subset_emb.emb.obs['label'],
+                                palette=self.dataset.PALETTE)
+                sns.despine()
+                plt.title(f"UMAP - {model} - colored by label -{add_filename.replace('_', ' ')}{add_title}", weight='bold')
+                plt.savefig(os.path.join(self.saving_folder, f"UMAP_kde_best_params_{model}{add_filename}_random_{n_patients}_{i}_colored_by_label.{self.extension}"), bbox_inches='tight')
+            
+            with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{model}_{n_patients}_patients{add_filename}.json'), 'w') as f:
+                json.dump({model: boostraped_ARI_patients[model]}, f, indent=4)
+                
+        with open(os.path.join(self.saving_folder, f'boostraped_ARI_patient_{n_patients}_patients{add_filename}.json'), 'w') as f:
+            json.dump(boostraped_ARI_patients, f, indent=4)
 
     def UMAP_best_params_clustering_visualization_per_slide(self, slide_id_col='name_origin'):
         if self.embeddings_per_slide is None:
             self.get_embeddings_per_slide()
 
-        for slide in self.ef.emb.obs[slide_id_col].unique():
-            plt.figure(figsize=(6, 2*len(self.pipelines_list)))
-            for i, model in enumerate(self.pipelines_list):
+        
+        if self.ef is not None:
+            for slide in self.ef.emb.obs[slide_id_col].unique():
+                plt.figure(figsize=(6, 2*len(self.pipelines_list)))
+                for i, model in enumerate(self.pipelines_list):
 
-                subset_emb = Embedding()
-                subset_emb.emb = self.embeddings_per_slide[model][slide].emb.copy()
+                    subset_emb = Embedding()
+                    subset_emb.emb = self.embeddings_per_slide[model][slide].emb.copy()
 
-                nc = list(subset_emb.emb.obs["label"].unique())
-                nc = [e for e in nc if isinstance(e, str) and e != "undetermined" and e != "nan" and e != np.nan]
-                print(nc)
-                nc = len(nc)
-                print("Number of clusters = {}".format(nc))
+                    nc = list(subset_emb.emb.obs["label"].unique())
+                    nc = [e for e in nc if isinstance(e, str) and e != "undetermined" and e != "nan" and e != np.nan]
+                    print(nc)
+                    nc = len(nc)
+                    print("Number of clusters = {}".format(nc))
 
-                if nc > 1:
+                    if nc > 1:
 
-                    r = subset_emb.unsupervised_clustering(n_clusters=nc, obsm='umap', algo=self.algo)
+                        r = subset_emb.unsupervised_clustering(n_clusters=nc, obsm='umap', algo=self.algo)
 
-                    # Remove nan labels for the plot
-                    subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
-                    subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+                        # Remove nan labels for the plot
+                        subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
+                        subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
 
-                    plt.subplot(len(self.pipelines_list), 2, (list(self.pipelines_list).index(model))*2+1)
-                    sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
-                                    y=subset_emb.emb.obsm['umap'][:,1],
-                                    hue=subset_emb.emb.obs['label'],
-                                    palette=HER2Dataset.PALETTE, 
-                                    s=10)   
-                    plt.title(f"{model}", weight='bold')
-                    sns.despine()
-                    if i != len(self.pipelines_list)-1:
-                        plt.legend().remove()
-                    else:
-                        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+                        plt.subplot(len(self.pipelines_list), 2, (list(self.pipelines_list).index(model))*2+1)
+                        sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                        y=subset_emb.emb.obsm['umap'][:,1],
+                                        hue=subset_emb.emb.obs['label'],
+                                        palette=self.dataset.PALETTE, 
+                                        s=10)   
+                        plt.title(f"{model}", weight='bold')
+                        sns.despine()
+                        if i != len(self.pipelines_list)-1:
+                            plt.legend().remove()
+                        else:
+                            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 
-                    plt.subplot(len(self.pipelines_list), 2, (list(self.pipelines_list).index(model))*2+2)
+                        plt.subplot(len(self.pipelines_list), 2, (list(self.pipelines_list).index(model))*2+2)
 
 
-                    sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
-                                    y=subset_emb.emb.obsm['umap'][:,1],
-                                    hue=subset_emb.emb.obs['predicted_label'],
-                                    palette='Accent',
-                                    s=10)
-                    plt.title(f"ARI: {r['ari']:.2f}", weight='bold')
-                    sns.despine()
-                    if i != len(self.pipelines_list)-1:
-                        plt.legend().remove()
-                    else:
-                        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+                        sns.scatterplot(x=subset_emb.emb.obsm['umap'][:,0],
+                                        y=subset_emb.emb.obsm['umap'][:,1],
+                                        hue=subset_emb.emb.obs['predicted_label'],
+                                        palette='Accent',
+                                        s=10)
+                        plt.title(f"ARI: {r['ari']:.2f}", weight='bold')
+                        sns.despine()
+                        if i != len(self.pipelines_list)-1:
+                            plt.legend().remove()
+                        else:
+                            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 
-                plt.tight_layout()
-                plt.suptitle(f"patient {slide}", weight='bold')
-                #plt.suptitle(f"UMAP kmeans - patient {patient}", weight='bold')
-                plt.savefig(os.path.join(self.saving_folder, f"UMAP_kmeans_best_params_patient_{slide}.{self.extension}"), bbox_inches='tight')
+                    plt.tight_layout()
+                    plt.suptitle(f"patient {slide}", weight='bold')
+                    #plt.suptitle(f"UMAP kmeans - patient {patient}", weight='bold')
+                    plt.savefig(os.path.join(self.saving_folder, f"UMAP_kmeans_best_params_patient_{slide}.{self.extension}"), bbox_inches='tight')
 
 
 
     def get_best_UMAP_ari_per_slide(self, 
-                                      n_neighbors_list=[10, 30, 50, 100, 150, 200, 250, 300, 350, 400],
-                                      min_dist_list=[0.001, 0.1], 
-                                      n_components_list=[2]):
+                                    n_neighbors_list=[10, 30, 50, 100, 150, 200, 250, 300, 350, 400],
+                                    min_dist_list=[0.001, 0.1], 
+                                    n_components_list=[2],
+                                    force_loading=False):
 
         best_ari_umap = {}
+
         print(f"Embeddings per patient: {self.embeddings_per_slide}", flush=True)
+
+        if force_loading:
+            
+            all_files = glob.glob(os.path.join(self.saving_folder, f'best_umap_ari_model_*_patient_*.json'))
+            models = [os.path.basename(f).split("best_umap_ari_model_")[1].split("_patient")[0] for f in all_files]
+            unique_models = list(set(models))
+            for model in unique_models:
+                print(f"Force loading best UMAP parameters for model {model} for existing patients...", flush=True)
+                best_ari_umap[model] = {}
+                for file in glob.glob(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_*.json')):
+                    patient_name = os.path.basename(file).split("_patient_")[1].split('.json')[0]
+                    with open(file, 'r') as f:
+                        best_ari_umap[model][patient_name] = json.load(f)
+
+        else:
         # For each model
-        for model in self.embeddings_per_slide.keys():
-            print(f"Model: {model}", flush=True)
-            best_ari_umap[model] = {}
-            for slide, subset_emb in self.embeddings_per_slide[model].items():
+        # for model in self.embeddings_per_slide.keys():
+            for model in list(self.embeddings_per_slide.keys()):
+                print(f"Model: {model}", flush=True)
+                best_ari_umap[model] = {}
 
-                n_labeled_patches = subset_emb.emb.obs[(subset_emb.emb.obs['label'] != 'nan') & ~(subset_emb.emb.obs['label'].isna())].shape[0]
-                if n_labeled_patches > 0:
 
-                    print(f"Computing best UMAP parameters for patient {slide} ({n_labeled_patches} labeled patches) with model {model}...", flush=True)
 
-                    # subset_emb = ImageEmbedding()
-                    # subset_emb.emb = self.image_embeddings[model].emb[self.image_embeddings[model].emb.obs[self.group] == patient][~self.image_embeddings[model].emb[self.image_embeddings[model].emb.obs[self.group] == patient].obs['label'].isna()]
-                    # subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+                for slide, subset_emb in self.embeddings_per_slide[model].items():
 
-                    if os.path.exists(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json')):
-                        print(f"Loading best UMAP parameters for model {model} and patient {slide}...", flush=True)
-                        with open(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json'), 'r') as f:
-                            best_ari_umap[model][slide] = json.load(f)
+                    n_labeled_patches = subset_emb.emb.obs[(subset_emb.emb.obs['label'] != 'nan') & ~(subset_emb.emb.obs['label'].isna())].shape[0]
+                    if n_labeled_patches > 0:
 
-                    else:
-                        print(f"File {os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json')} doesn't exist", flush=True)
-                        best_ari_umap[model][slide] = self.get_best_UMAP_ari_subset(subset_emb, 
-                                                                                    model, 
-                                                                                    slide, 
-                                                                                    n_neighbors_list=n_neighbors_list, 
-                                                                                    min_dist_list=min_dist_list, 
-                                                                                    n_components_list=n_components_list)
+                        print(f"Computing best UMAP parameters for patient {slide} ({n_labeled_patches} labeled patches) with model {model}...", flush=True)
 
-            # Do it also for handcrafted features
-            # best_ari_umap['handcrafted_features'] = {}
-            # for patient in self.ef.emb.obs[self.group].unique():
-            #     print(f"Computing best UMAP parameters for patient {patient} with handcrafted features...", flush=True)
+                        if os.path.exists(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json')):
+                            print(f"Loading best UMAP parameters for model {model} and patient {slide}...", flush=True)
+                            with open(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json'), 'r') as f:
+                                best_ari_umap[model][slide] = json.load(f)
 
-            #     subset_emb = ImageEmbedding()
-            #     subset_emb.emb = self.ef.emb[self.ef.emb.obs[self.group] == patient][~self.ef.emb[self.ef.emb.obs[self.group] == patient].obs['label'].isna()]
-            #     subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
-
-            #     if os.path.exists(os.path.join(self.saving_folder, f'best_umap_ari_model_handcrafted_features_patient_{patient}.json')):
-            #         with open(os.path.join(self.saving_folder, f'best_umap_ari_model_handcrafted_features_patient_{patient}.json'), 'r') as f:
-            #             best_ari_umap['handcrafted_features'][patient] = json.load(f)
-            #     else:
-            #         best_ari_umap['handcrafted_features'][patient] = self.get_best_UMAP_ari_subset(subset_emb, 'handcrafted_features', patient, algo=algo, n_neighbors_list=n_neighbors_list, min_dist_list=min_dist_list, n_components_list=n_components_list)
+                        else:
+                            print(f"File {os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json')} doesn't exist", flush=True)
+                            best_ari_umap[model][slide] = self.get_best_UMAP_ari_subset(subset_emb, 
+                                                                                        model, 
+                                                                                        slide, 
+                                                                                        n_neighbors_list=n_neighbors_list, 
+                                                                                        min_dist_list=min_dist_list, 
+                                                                                        n_components_list=n_components_list)
+                            
+                            with open(os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_patient_{slide}.json'), 'w') as f:
+                                json.dump(best_ari_umap[model][slide], f, indent=4)
 
         return best_ari_umap
     
@@ -418,29 +643,53 @@ class BenchmarkClustering(BenchmarkBase):
     
 
     def compute_umap_ARI_patient_for_batch_control(self):
+        if self.image_embeddings is not None and len(self.image_embeddings) > 0:
+            n_patients = self.image_embeddings[self.pipelines_list[0]].emb.obs[self.group].nunique()
+        else:
+            n_patients = 0
         aris_patient = {}
         for model in self.pipelines_list:
-            # recompute unsupervised_clustering overall
-            self.image_embeddings[model].unsupervised_clustering(n_clusters=6, 
-                                                                 algo=self.algo,
-                                                                 obsm='umap')
             
-            # compute ARI with patient
-            aris_patient[model] = adjusted_rand_score(self.image_embeddings[model].emb.obs[self.group], self.image_embeddings[model].emb.obs['predicted_label'])
+            if os.path.exists(os.path.join(self.saving_folder, f'ARI_patient_{model}.json')):
+                print(f"Loading ARI for model {model}...", flush=True)
+                with open(os.path.join(self.saving_folder, f'ARI_patient_{model}.json'), 'r') as f:
+                    aris_patient[model] = json.load(f)[model]
+            else:
+                # recompute unsupervised_clustering overall
+                self.image_embeddings[model].unsupervised_clustering(n_clusters=n_patients, 
+                                                                    algo=self.algo,
+                                                                    obsm='umap')
+                
+                # compute ARI with patient
+                aris_patient[model] = adjusted_rand_score(self.image_embeddings[model].emb.obs[self.group], self.image_embeddings[model].emb.obs['predicted_label'])
+                
+                with open(os.path.join(self.saving_folder, f'ARI_patient_{model}.json'), 'w') as f:
+                    json.dump({model: aris_patient[model]}, f)   
+                 
+        if self.ef is not None:
             
-        # handcrafed features
-        
-        self.ef.unsupervised_clustering(n_clusters=6,
-                                        algo=self.algo,
-                                        obsm='umap')
-        
-        aris_patient['handcrafted_features'] = adjusted_rand_score(self.ef.emb.obs[self.group], self.ef.emb.obs['predicted_label'])
-        
-            
+            if os.path.exists(os.path.join(self.saving_folder, f'ARI_patient_handcrafted_features.json')):
+                print(f"Loading ARI for handcrafted features...", flush=True)
+                with open(os.path.join(self.saving_folder, f'ARI_patient_handcrafted_features.json'), 'r') as f:
+                    aris_patient['handcrafted_features'] = json.load(f)['handcrafted_features']
+            else:
+            # handcrafed features
+                
+                self.ef.unsupervised_clustering(n_clusters=6,
+                                                algo=self.algo,
+                                                obsm='umap')
+                
+
+                
+                aris_patient['handcrafted_features'] = adjusted_rand_score(self.ef.emb.obs[self.group], self.ef.emb.obs['predicted_label'])
+                
+                with open(os.path.join(self.saving_folder, f'ARI_patient_handcrafted_features.json'), 'w') as f:
+                    json.dump({'handcrafted_features': aris_patient['handcrafted_features']}, f)   
+
         with open(os.path.join(self.saving_folder, 'ARI_patient.json'), 'w') as f:
             json.dump(aris_patient, f)
-            
-        
+                
+        return aris_patient
 
     
     def get_best_UMAP_ari_overall(self, n_clusters=6, 
@@ -450,17 +699,29 @@ class BenchmarkClustering(BenchmarkBase):
                                  annotated_only=False,
                                  slides_id_col='name_origin'):
         
+        models = self.pipelines_list.copy()
+        embeddings = self.pipelines_list.copy()
         if annotated_only:
-            embeddings = list(self.annotated_embeddings.values())
-            models = list(self.annotated_embeddings.keys())
+            # embeddings = list(self.annotated_embeddings.values())
+            # models = list(self.annotated_embeddings.keys())
+            if self.annotated_embeddings is not None and len(self.annotated_embeddings) > 0:
+                embeddings = [self.annotated_embeddings[model] for model in models if self.annotated_embeddings is not None]
             add_filename = "_annotated_only"
+
+
+            if self.ef is not None:
+                models.append('handcrafted_features')
+                embeddings.append(self.annotated_embeddings["handcrafted_features"])
         else:
-            embeddings = list(self.image_embeddings.values())
-            models = list(self.image_embeddings.keys())
+            # embeddings = list(self.image_embeddings.values())
+            # models = list(self.image_embeddings.keys())
+            if self.image_embeddings is not None and len(self.image_embeddings) > 0:
+                embeddings = [self.image_embeddings[model] for model in models if self.image_embeddings[model] is not None]
             add_filename = ""
 
-            embeddings.append(self.ef)
-            models.append('handcrafted_features')
+            if self.ef is not None:
+                embeddings.append(self.ef)
+                models.append('handcrafted_features')
 
 
         best_ari_umap = {}
@@ -478,7 +739,7 @@ class BenchmarkClustering(BenchmarkBase):
 
                 print(f"File {os.path.join(self.saving_folder, f'best_umap_ari_model_{model}_all{add_filename}.json')} doesn't exist", flush=True)
 
-                best_ari, best_params, df_all_runs = embedding.UMAP_validation_unsupervised_clustering(n_clusters=n_clusters,
+                best_ari, best_params, df_all_runs = embedding.UMAP_validation_unsupervised_clustering_non_parallel(n_clusters=n_clusters,
                                                                                           n_neighbors_list=n_neighbors_list,
                                                                                           min_dist_list=min_dist_list,
                                                                                           n_components_list=n_components_list,
@@ -505,19 +766,13 @@ class BenchmarkClustering(BenchmarkBase):
 
         print(f"Saving folder: {self.saving_folder}", flush=True)
 
-        self.ef.add_label()
+        if self.ef is not None:
+            self.ef.add_label(dataset=self.dataset_name)
 
-        if os.path.exists(os.path.join(self.saving_folder, 'unsupervised_clustering_results_optk.json')):
-            print(f"Loading unsupervised clustering results for optk located at {os.path.join(self.saving_folder, 'unsupervised_clustering_results_optk.json')}", flush=True)
-            with open(os.path.join(self.saving_folder, 'unsupervised_clustering_results_optk.json'), 'r') as f:
-                unsupervised_clustering_results_optk = json.load(f)
-        else:
-            print(f"File {os.path.join(self.saving_folder, 'unsupervised_clustering_results_optk.json')} doesn't exist", flush=True)
-            print(f"Computing unsupervised clustering for optk...", flush=True)
-            unsupervised_clustering_results_optk = self.unsupervised_clustering_benchmark(n_clusters=None)
-            print(f"Saving unsupervised clustering results for optk at {os.path.join(self.saving_folder, 'unsupervised_clustering_results_optk.json')}", flush=True)
-            with open(os.path.join(self.saving_folder, 'unsupervised_clustering_results_optk.json'), 'w') as f:
-                json.dump(unsupervised_clustering_results_optk, f)
+
+            
+        unsupervised_clustering_results_optk = self.unsupervised_clustering_benchmark(n_clusters=None, clustering_name='raw')
+
         
         plt.figure()
         plot_ari_scores_all_patients(unsupervised_clustering_results_optk)
@@ -525,80 +780,71 @@ class BenchmarkClustering(BenchmarkBase):
 
 
 
-        if os.path.exists(os.path.join(self.saving_folder, 'svd5_multiplied_by_S_unsupervised_clustering_results_optk.json')):
-            with open(os.path.join(self.saving_folder, 'svd5_multiplied_by_S_unsupervised_clustering_results_optk.json'), 'r') as f:
-                svd5_multiplied_by_S = json.load(f)
-        else:
-            svd5_multiplied_by_S = self.unsupervised_clustering_benchmark(n_clusters=None, 
+
+        svd5_multiplied_by_S = self.unsupervised_clustering_benchmark(n_clusters=None, 
                                                                              layer='svd', 
                                                                              var_ratio_threshold_for_svd=None,
                                                                                u_comp_list=[f"u{i+1}" for i in range(5)],
                                                                                recompute_dim_red_on_subset=True,
                                                                                multiply_by_variance=True,
                                                                                center_before_svd=False,
-                                                                               scale_before_svd=False)
+                                                                               scale_before_svd=False,
+                                                                               clustering_name='svd5')
             
-            with open(os.path.join(self.saving_folder, 'svd5_multiplied_by_S_unsupervised_clustering_results_optk.json'), 'w') as f:
-                json.dump(svd5_multiplied_by_S, f)
+
     
         plt.figure()
         plot_ari_scores_all_patients(svd5_multiplied_by_S)
-        plt.savefig(os.path.join(self.saving_folder, f'ari_scores_svd5_multiplied_by_S.{self.extension}'), bbox_inches='tight')
+        plt.savefig(os.path.join(self.saving_folder, f'ari_scores_svd5.{self.extension}'), bbox_inches='tight')
 
 
 
         self.get_embeddings_per_slide()
+        print(f"Embeddings per slides loaded for models: {self.embeddings_per_slide.keys()}")
         best_umap_ari_per_slide = self.get_best_UMAP_ari_per_slide()
-            
         with open(os.path.join(self.saving_folder, 'best_umap_ari_per_slide.json'), 'w') as f:
             json.dump(best_umap_ari_per_slide, f)
 
-
-
-        # if os.path.exists(os.path.join(self.saving_folder, 'best_umap_ari_overall.json')):
-        #     with open(os.path.join(self.saving_folder, 'best_umap_ari_overall.json'), 'r') as f:
-        #         best_umap_ari_overall = json.load(f)
-        # else:
         best_umap_ari_overall = self.get_best_UMAP_ari_overall()
-            
         with open(os.path.join(self.saving_folder, 'best_umap_ari_overall.json'), 'w') as f:
             json.dump(best_umap_ari_overall, f)
 
         self.get_annotated_embeddings()
-
-        # if os.path.exists(os.path.join(self.saving_folder, 'best_umap_ari_overall_annotated_only.json')):
-        #     with open(os.path.join(self.saving_folder, 'best_umap_ari_overall_annotated_only.json'), 'r') as f:
-        #         best_umap_ari_overall_annotated_only = json.load(f)
-        # else:
         best_umap_ari_overall_annotated_only = self.get_best_UMAP_ari_overall(annotated_only=True)
-        
         with open(os.path.join(self.saving_folder, 'best_umap_ari_overall_annotated_only.json'), 'w') as f:
             json.dump(best_umap_ari_overall_annotated_only, f)
 
         # Visualization UMAP-kmeans per slide
         self.set_best_UMAP_per_slide()
-        self.UMAP_best_params_clustering_visualization_per_slide()
-        self.plot_slides_with_clusters(obsm='umap')
+        # self.UMAP_best_params_clustering_visualization_per_slide()
+        # self.plot_slides_with_clusters(obsm='umap')
+
+
+        
+        self.set_best_UMAP_overall()
+
+        # self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', palette='Set3')
+        # self.UMAP_best_params_clustering_visualization_overall(hue='tumor', palette='Accent')
+        # self.UMAP_best_params_clustering_visualization_overall(hue='name_origin')
+
+        palette_with_nans = self.dataset.PALETTE.copy()
+        palette_with_nans['nan'] = 'black'
+        # self.UMAP_best_params_clustering_visualization_overall(hue='label', palette=palette_with_nans)
 
         # Visualization UMAP k-means overall all slides
-        self.set_best_UMAP_overall()
-        self.compute_umap_ARI_patient_for_batch_control()
-        self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', palette='Set3')
-        self.UMAP_best_params_clustering_visualization_overall(hue='tumor', palette='Accent')
-        self.UMAP_best_params_clustering_visualization_overall(hue='name_origin')
-
-        palette_with_nans = HER2Dataset.PALETTE.copy()
-        palette_with_nans['nan'] = 'black'
-        self.UMAP_best_params_clustering_visualization_overall(hue='label', palette=palette_with_nans)
+        n_patients = self.image_embeddings[self.pipelines_list[0]].emb.obs[self.group].nunique()
+        if n_patients <= 10:
+            ari_patients = self.compute_umap_ARI_patient_for_batch_control()
+        else:
+            self.UMAP_best_params_clustering_many_patients_batch(annotated_only=False, palette='Set3', n_patients=10)
 
         # Visiualization UMAP k-means on annotated slides only
         self.set_best_UMAP_overall(annotated_only=True)
         self.UMAP_best_params_clustering_visualization_overall(hue='predicted_label', annotated_only=True, palette='Set3')
         self.UMAP_best_params_clustering_visualization_overall(hue='tumor', annotated_only=True, palette='Accent')
         self.UMAP_best_params_clustering_visualization_overall(hue='name_origin', annotated_only=True, palette='Accent')
-        self.UMAP_best_params_clustering_visualization_overall(hue='label', annotated_only=True, palette=HER2Dataset.PALETTE)
-
-
+        self.UMAP_best_params_clustering_visualization_overall(hue='label', annotated_only=True, palette=self.dataset.PALETTE)
+        
 
         # Plot ARI scores
         plt.figure()
@@ -616,12 +862,30 @@ class BenchmarkClustering(BenchmarkBase):
             layer_name = 'raw'
                 
         if self.embeddings_per_slide is None:
-                self.get_embeddings_per_slide()
+            self.get_embeddings_per_slide()
+
+        # Count number of annotated slides
+        n_slides = len(self.embeddings_per_slide[self.pipelines_list[0]])
+
+        if n_slides <= 10:
+            emb_slides = self.embeddings_per_slide.copy()
+
+        else:
+            emb_slides = {}
+            for model in self.pipelines_list:
+                emb_slides[model] = {}
+                slides = list(self.embeddings_per_slide[model].keys())
+                selected_slides = list(self.embeddings_per_slide[self.pipelines_list[0]].keys())[:10]
+                for slide in selected_slides:
+                    emb_slides[model][slide] = self.embeddings_per_slide[model][slide]
+
+            print(f"Number of slides > 10, randomly selecting 10 slides: {list(emb_slides[self.pipelines_list[0]].keys())}", flush=True)
         
         for model in self.pipelines_list:
-            for slide, ie_subset_img in self.embeddings_per_slide[model].items():
+
+            for slide, ie_subset_img in emb_slides[model].items():
                 if ie_subset_img.emb.obs[(ie_subset_img.emb.obs['label'] != 'nan') & ~(ie_subset_img.emb.obs['label'].isna())].shape[0] > 0:
-                    ie_subset_img.emb.obs['path_origin'] = ie_subset_img.emb.obs['path_origin'].apply(lambda x: x.replace('ghaefliger', 'lfournier/repositories'))
+                    # ie_subset_img.emb.obs['path_origin'] = ie_subset_img.emb.obs['path_origin'].apply(lambda x: x.replace('ghaefliger', 'lfournier/repositories'))
                     ie_subset_img.emb.obs['start_width_origin'] = ie_subset_img.emb.obs['start_width_origin'].astype(int)
                     ie_subset_img.emb.obs['start_height_origin'] = ie_subset_img.emb.obs['start_height_origin'].astype(int)
 
@@ -645,7 +909,7 @@ class BenchmarkClustering(BenchmarkBase):
                         subset_without_nans.compare_two_labels_plot(sample_name=slide,
                                                             label_obs_name1="label", 
                                                             label_obs_name2="predicted_label",
-                                                            palette_1=HER2Dataset.PALETTE,
+                                                            palette_1=self.dataset.PALETTE,
                                                             )
                         
 

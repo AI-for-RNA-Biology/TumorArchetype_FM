@@ -106,6 +106,7 @@ Here are the arguments you need to provide:
 - `--pipeline_name`: how you want to name the pipeline
 - `--results_folder`: folder to save the embeddings. 
 All results will be saved at `{results_folder}/{pipeline_name}/`.
+- `--dataset`: dataset name. Choose among "HER2" and "TNBC". Default is "HER2".
 
 
 In more details here are the steps:
@@ -117,7 +118,7 @@ In more details here are the steps:
 
 Example usage to extract embeddings from SimCLR
 ```
-python scripts/pipeline.py --model_name simclr --patches_folder ../results/compute_patches/her2_final_without_A/ --pipeline_name simclr --results_folder ../results/pipeline
+python scripts/pipeline.py --model_name simclr --patches_folder ../results/compute_patches/her2_final_without_A/ --pipeline_name simclr --results_folder ../results/pipeline --embedding_name image_embedding 
 ```
 
 Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `script/compute_embeddings.py` that takes the same arguments. 

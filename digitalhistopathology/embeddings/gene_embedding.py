@@ -9,6 +9,8 @@ import gzip
 import itertools
 import math
 import os
+import glob
+import gc
 import tempfile
 import warnings
 
@@ -177,11 +179,24 @@ class GeneEmbedding(Embedding):
         # In patches names that I added rep_ from origin name
         if self.name is not None and "her2" in self.name.lower():
             df_filenames["name_origin"] = df_filenames["name_origin"].apply(lambda o: o.split("_rep")[0] + o.split("_rep")[1])
-        df_filenames["x"] = df_filenames["path"].apply(lambda f: int(f.split("/")[-1].split("_spot")[-1].split("x")[0]))
-        df_filenames["y"] = df_filenames["path"].apply(
-            lambda f: int(f.split("/")[-1].split("_spot")[-1].split("x")[1].split(".")[0])
-        )
-        gene_emb.obs["path"] = gene_emb.obs.merge(df_filenames, how="left", on=["name_origin", "x", "y"])["path"].values
+        print(f"Path: {df_filenames['path'].values[0].split('/')[-1]}", flush=True)
+        print(df_filenames.columns, flush=True)
+        
+        if df_filenames['path'].values[0].endswith('hdf5'):
+            
+            df_filenames["x"] = "none"
+            df_filenames["y"] = "none"
+            
+            gene_emb.obs['path'] = df_filenames['path'].values[0]
+            
+        else:
+            
+            df_filenames["x"] = df_filenames["path"].apply(lambda f: int(f.split("/")[-1].split("_spot")[-1].split("x")[0]))
+            
+            df_filenames["y"] = df_filenames["path"].apply(
+                lambda f: int(f.split("/")[-1].split("_spot")[-1].split("x")[1].split(".")[0])
+            )
+            gene_emb.obs["path"] = gene_emb.obs.merge(df_filenames, how="left", on=["name_origin", "x", "y"])["path"].values
 
     def read_old_st_with_gzip_compression(self, index):
         """Read old ST sample (Ex: her2-positive breast cancer data).
@@ -226,6 +241,7 @@ class GeneEmbedding(Embedding):
                 data_st = sc.read_csv(genes_count_file)
             else:
                 data_st = sc.read_text(temp_file_path_count)
+                
             data_st = parsing_oldST(data_st, coordinates_file=temp_file_path_spatial)
             st.add.image(
                 data_st,
@@ -520,12 +536,55 @@ class GeneEmbedding(Embedding):
         adata.uns["filter_genes_log2_threshold"] = threshold
         return adata
 
-    def compute_raw_embeddings(self):
-        """Fill emb with raws genes counts that are aligned across the different samples."""
+    # def compute_raw_embeddings(self):
+    #     """Fill emb with raws genes counts that are aligned across the different samples."""
+    #     genes_present_df = None
+    #     for i in range(len(self.genes_count_filenames)):
+    #         gene_emb = self.get_anndata(i, whole_data=True)
+    #         genes_list = list(gene_emb.var_names)
+    #         del gene_emb.uns["spatial"]
+
+    #         if "her2" in self.name.lower():
+    #             gene_emb.obs["index"] = gene_emb.obs.apply(
+    #                 lambda r: r["name_origin"][0] + "_rep{}_".format(r["name_origin"][1]) + str(r.name), axis=1
+    #             )
+    #             gene_emb.obs["tumor"] = gene_emb.obs["name_origin"].apply(lambda n: n[0])
+    #         else:
+    #             gene_emb.obs["index"] = gene_emb.obs.apply(lambda r: r["name_origin"] + "_" + str(r.name), axis=1)
+
+    #         gene_emb.obs = gene_emb.obs.reset_index(drop=True).set_index("index")
+
+    #         if i == 0:
+    #             self.emb = gene_emb.copy()
+    #             genes_present_df = pd.DataFrame(index=genes_list)
+    #             genes_present_df[self.samples_names[i]] = np.ones(len(genes_list))
+    #         else:
+    #             # concat X, obs, uns, obsm (var deleted)
+    #             self.emb = ad.concat([self.emb, gene_emb], axis=0, join="outer", uns_merge="first")
+    #             # replace nan with 0
+    #             self.emb.X = np.nan_to_num(self.emb.X, nan=0.0)
+    #             current_genes_present_df = pd.DataFrame(index=genes_list)
+    #             current_genes_present_df[self.samples_names[i]] = np.ones(len(genes_list))
+    #             genes_present_df = genes_present_df.merge(
+    #                 current_genes_present_df, left_index=True, right_index=True, how="outer"
+    #             )
+
+    #     self.emb.var = pd.concat((self.emb.var, genes_present_df.fillna(0).astype(bool)), axis=1)
+    
+    def compute_raw_embeddings(self, chunk_size=10, temp_dir="./tmp_gene_emb_chunks"):
+        
+        from gtfparse import read_gtf
+
+        os.makedirs(temp_dir, exist_ok=True)
         genes_present_df = None
+        chunk_embs = []
         for i in range(len(self.genes_count_filenames)):
             gene_emb = self.get_anndata(i, whole_data=True)
             genes_list = list(gene_emb.var_names)
+            
+            # genes_list = list(set(gencode['gene_id'].unique()) & set(gene_emb.var_names))
+            # gene_emb = gene_emb[:, genes_list]
+            
             del gene_emb.uns["spatial"]
 
             if "her2" in self.name.lower():
@@ -538,23 +597,38 @@ class GeneEmbedding(Embedding):
 
             gene_emb.obs = gene_emb.obs.reset_index(drop=True).set_index("index")
 
-            if i == 0:
-                self.emb = gene_emb.copy()
+            chunk_embs.append(gene_emb)
+            if genes_present_df is None:
                 genes_present_df = pd.DataFrame(index=genes_list)
-                genes_present_df[self.samples_names[i]] = np.ones(len(genes_list))
             else:
-                # concat X, obs, uns, obsm (var deleted)
-                self.emb = ad.concat([self.emb, gene_emb], axis=0, join="outer", uns_merge="first")
-                # replace nan with 0
-                self.emb.X = np.nan_to_num(self.emb.X, nan=0.0)
-                current_genes_present_df = pd.DataFrame(index=genes_list)
-                current_genes_present_df[self.samples_names[i]] = np.ones(len(genes_list))
-                genes_present_df = genes_present_df.merge(
-                    current_genes_present_df, left_index=True, right_index=True, how="outer"
-                )
+                # Add any new genes to the index
+                new_genes = set(genes_list) - set(genes_present_df.index)
+                if new_genes:
+                    genes_present_df = genes_present_df.reindex(
+                        list(genes_present_df.index) + list(new_genes),
+                        fill_value=0
+                    )
+            genes_present_df[self.samples_names[i]] = pd.Series(1, index=genes_list)
 
+            # Save chunk and clear memory
+            if (i + 1) % chunk_size == 0 or (i + 1) == len(self.genes_count_filenames):
+                chunk_file = os.path.join(temp_dir, f"chunk_{i // chunk_size}.h5ad")
+                ad.concat(chunk_embs, axis=0, join="outer", uns_merge="first").write(chunk_file)
+                chunk_embs = []
+                gc.collect()
+
+        # Merge all chunks at the end
+        chunk_files = sorted(glob.glob(os.path.join(temp_dir, "chunk_*.h5ad")))
+        print(f"Merging {len(chunk_files)} chunks from {temp_dir}...")
+        all_embs = [ad.read_h5ad(f) for f in chunk_files]
+        print(f"Total number of chunks: {len(all_embs)}")
+        self.emb = ad.concat(all_embs, axis=0, join="outer", uns_merge="first")
+        print(f"Shape of concatenated embeddings: {self.emb.shape}")
+        self.emb.X = np.nan_to_num(self.emb.X, nan=0.0)
+        print("Replacing NaN values with 0 in embeddings matrix.")
         self.emb.var = pd.concat((self.emb.var, genes_present_df.fillna(0).astype(bool)), axis=1)
-
+        print("Gene embeddings computed and stored in self.emb.")
+        
     def preprocessing(
         self,
         filter_genes_groupby="tumor",
@@ -752,6 +826,88 @@ class GeneEmbedding(Embedding):
 
         return reliably_expressed_genes
 
+    def compute_umap(self, palette=None, figures_folder=None):
+        self.emb.layers['counts'] = self.emb.X.copy()
+
+        # Perform dimensionality reduction
+        sc.pp.highly_variable_genes(self.emb, n_top_genes=19000)
+        sc.tl.pca(self.emb, use_highly_variable=True)
+        sc.pp.neighbors(self.emb, n_pcs=10)
+        sc.tl.umap(self.emb)
+
+        self.emb.obsm['umap'] = self.emb.obsm['X_umap']
+
+        # Plot UMAPs
+        if "tumor" in self.emb.obs.columns and "label" in self.emb.obs.columns:
+            plt.figure(figsize=(20, 5))
+            plt.subplot(1, 3, 1)
+            sns.scatterplot(x=self.emb.obsm['X_umap'][:, 0], 
+                            y=self.emb.obsm['X_umap'][:, 1], 
+                            hue=self.emb.obs['tumor'], 
+                            palette='Accent',
+                            s=5,
+                            alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tumor (all spots)", weight='bold')
+
+            plt.subplot(1, 3, 2)
+            sub_emb = self.emb[~self.emb.obs['label'].isna()]
+            sns.scatterplot(x=sub_emb.obsm['X_umap'][:, 0],
+                            y=sub_emb.obsm['X_umap'][:, 1],
+                            hue=sub_emb.obs['tumor'],
+                            palette="Accent",
+                            s=10,
+                            alpha=0.7)
+            plt.title("Labeled by tumor (labeled spots)", weight='bold')
+
+            plt.subplot(1, 3, 3)
+            sns.scatterplot(x=self.emb.obsm['X_umap'][:, 0], 
+                            y=self.emb.obsm['X_umap'][:, 1], 
+                            hue=self.emb.obs['label'], 
+                            palette=palette,
+                            s=10,
+                            alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tissue type", weight='bold')
+            plt.suptitle("UMAP", weight='bold')
+            plt.tight_layout()
+            if figures_folder is not None:
+                plt.savefig(os.path.join(figures_folder, f"umap_gene_emb_{self.name}.pdf"), bbox_inches='tight')
+
+            # Plot KDE UMAPs
+            plt.figure(figsize=(20, 5))
+            plt.subplot(1, 3, 1)
+            sns.kdeplot(x=self.emb.obsm['X_umap'][:, 0], 
+                        y=self.emb.obsm['X_umap'][:, 1], 
+                        hue=self.emb.obs['tumor'], 
+                        palette='Accent',
+                        alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tumor (all spots)", weight='bold')
+
+            plt.subplot(1, 3, 2)
+            sns.kdeplot(x=sub_emb.obsm['X_umap'][:, 0],
+                        y=sub_emb.obsm['X_umap'][:, 1],
+                        hue=sub_emb.obs['tumor'],
+                        palette="Accent",
+                        alpha=0.7)
+            plt.title("Labeled by tumor (labeled spots)", weight='bold')
+
+            plt.subplot(1, 3, 3)
+            sns.kdeplot(x=self.emb.obsm['X_umap'][:, 0], 
+                        y=self.emb.obsm['X_umap'][:, 1], 
+                        hue=self.emb.obs['label'], 
+                        palette=palette,
+                        alpha=0.7)
+            sns.despine()
+            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            plt.title("Labeled by tissue type", weight='bold')
+            plt.suptitle("UMAP", weight='bold')
+            plt.tight_layout()
+            plt.savefig(os.path.join(figures_folder, f"umap_kde_gene_expression_{self.name}.pdf"), bbox_inches='tight')
 
     @staticmethod
     def get_z_score_one_pathway(df_spots, GO_genes, df_background=None, mahalanobis=False):
@@ -862,3 +1018,4 @@ class GeneEmbedding(Embedding):
         log10_pvalues = pd.DataFrame.from_dict(pvalues, orient='index')
 
         return log10_pvalues
+

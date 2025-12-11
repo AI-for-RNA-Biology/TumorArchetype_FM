@@ -52,10 +52,12 @@ class Classification_knn(DimRed):
         Returns:
             int: the optimal number of neighbours for knn (k)
         """
+        print(f"Here emb size: {self.emb.shape}", flush=True)
         label_emb = Classification_knn()
         label_emb.emb = self.emb[~self.emb.obs["label"].isna()]
         label_emb.emb = label_emb.emb[label_emb.emb.obs["label"] != "undetermined"]
 
+        print(f"Here label_emb size: {label_emb.emb.shape}", flush=True)
         accuracies_dict = dict()
         f1_dict = dict()
         for patient in list(self.emb.obs.tumor.unique()):
@@ -73,7 +75,10 @@ class Classification_knn(DimRed):
                 except Exception as e:
                     print("Compute svd before wanting to use svd comp for knn: {}".format(e))
                     return
-
+            print(f"Here current_emb size: {current_emb.emb.shape} for patient {patient}", flush=True)
+            
+            print(f"Here X size: {X.shape} for patient {patient}", flush=True)
+            
             X_train, X_test, y_train, y_test = train_test_split(
                 X, current_emb.emb.obs.label.values, test_size=0.2, random_state=42
             )
@@ -175,7 +180,7 @@ class Classification_knn(DimRed):
             print("Shape of the data: {}".format(current_emb.emb.shape))
 
             filtered_data = current_emb.emb[
-                (~current_emb.emb.obs["label"].isna()) & (current_emb.emb.obs["label"] != "undetermined")
+                (~current_emb.emb.obs["label"].isna()) & (current_emb.emb.obs["label"] != "undetermined") & (current_emb.emb.obs["label"] != "nan")
             ]
 
             print("Shape of the filtered data: {}".format(filtered_data.shape))
@@ -231,7 +236,7 @@ class Classification_knn(DimRed):
                     ] = label_pred
             else:
                 emb_predict = current_emb.emb[
-                    current_emb.emb.obs["label"].isna() | (current_emb.emb.obs["label"] == "undetermined")
+                    current_emb.emb.obs["label"].isna() | (current_emb.emb.obs["label"] == "undetermined") | (current_emb.emb.obs["label"] == "nan")
                 ]
                 print("Shape of the data to predict: {}".format(emb_predict.shape))
                 if svd_comp is None:

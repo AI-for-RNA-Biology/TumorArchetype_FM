@@ -12,9 +12,20 @@ import seaborn as sns
 import json
 import numpy as np
 import os
-sys.path.append("../")
-
 import glob
+
+# Add the project root to Python path (relative to this script's location)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)  # Go up one level from scripts/ to project root
+
+# Insert project root at front so it takes precedence over installed packages
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Also prefer the local dinov2 directory if present (repo/dinov2)
+local_dinov2_path = os.path.join(project_root, 'dinov2')
+if os.path.isdir(local_dinov2_path) and local_dinov2_path not in sys.path:
+    sys.path.insert(0, local_dinov2_path)
 
 from digitalhistopathology.benchmark.benchmark_shannon import BenchmarkShannon
 from digitalhistopathology.benchmark.benchmark_clustering import BenchmarkClustering
@@ -34,7 +45,6 @@ def benchmark(task,
               engineered_features_type='scMTOP',
               extension='png',
               group='tumor',
-              label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
               min_comp=512,
               algo='kmeans',
               pct_variance=0.9,
@@ -47,7 +57,10 @@ def benchmark(task,
               on_invasive=False,
               min_cluster=4,
               max_cluster=10,
-              cluster_step=1):
+              cluster_step=1,
+              dataset="HER2",
+              fixed_n_clusters=None,
+              strategy_silhouette_then_batch_effect=True):
         
     if task == 'shannon_entropy':
 
@@ -62,9 +75,9 @@ def benchmark(task,
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files,
                          min_comp=min_comp,
                          pct_variance=pct_variance,
+                         dataset=dataset
                          )
         
     elif task == 'unsupervised_clustering_ARI':
@@ -80,8 +93,8 @@ def benchmark(task,
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files,
-                         algo=algo)
+                         algo=algo,
+                         dataset=dataset)
         
     elif task == 'regression':
 
@@ -96,11 +109,11 @@ def benchmark(task,
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files,
                          regression_type=regression_type,
                          n_splits=n_splits,
                          alpha_reg=alpha_reg,
-                         on_invasive=on_invasive)
+                         on_invasive=on_invasive,
+                         dataset=dataset)
         
     elif task == 'invasive_cancer_clustering':
 
@@ -115,18 +128,27 @@ def benchmark(task,
                          engineered_features_type=engineered_features_type,
                          extension=extension,
                          group=group,
-                         label_files=label_files,
                          molecular_emb_path=molecular_emb_path,
                          molecular_name=molecular_name,
                          ref_model_emb=ref_model_emb,
                          algo=algo,
                          min_cluster=min_cluster,
                          max_cluster=max_cluster,
-                         cluster_step=cluster_step)
+                         cluster_step=cluster_step,
+                         dataset=dataset, 
+                         fixed_n_clusters=fixed_n_clusters,
+                         strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect)
     else:
         raise ValueError("Task not recognized. Please choose between 'shannon_entropy', 'unsupervised_clustering_ARI', 'regression', and 'invasive_cancer_clustering'.")
 
-    benchmark_obj.saving_folder = os.path.join(benchmark_obj.saving_folder, task)
+    if task != 'invasive_cancer_clustering':
+        benchmark_obj.saving_folder = os.path.join(benchmark_obj.saving_folder, task)
+    else:
+        inv_folder = "invasive_cancer_clustering"
+        if not strategy_silhouette_then_batch_effect:
+            inv_folder += "_strategy_silhouette_and_batch_effect"
+        benchmark_obj.saving_folder = os.path.join(benchmark_obj.saving_folder, inv_folder)
+            
     benchmark_obj.compute_image_embeddings()
     benchmark_obj.load_engineered_features()
 
@@ -147,6 +169,7 @@ def main():
     parser.add_argument('--extension', type=str, default='png', help='Extension of the image to save')
     parser.add_argument('--image_embedding_name', type=str, default='image_embedding.h5ad', help='Name of the image embedding file')
     parser.add_argument('--results_folder', type=str, default="../results", help='Base of the results folder')
+    parser.add_argument('--dataset', type=str, default="HER2", help='Dataset to use for the benchmark')
     
     # For the 2 clustering tasks
     parser.add_argument('--clustering_algo', type=str, default='kmeans', help='Clustering algorithm to use')
@@ -168,6 +191,8 @@ def main():
     parser.add_argument('--min_cluster', type=int, default=4, help='Minimum number of clusters to use')
     parser.add_argument('--max_cluster', type=int, default=10, help='Maximum number of clusters to use')
     parser.add_argument('--cluster_step', type=int, default=1, help='Step size for clustering')
+    parser.add_argument('--fixed_n_clusters', type=int, default=None, help='If specified, use a fixed number of clusters for all models')
+    parser.add_argument('--no_strategy_silhouette_then_batch_effect', action="store_true", help='Disable silhouette then batch effect strategy for parameters selection in invasive cancer clustering')
     
 
     ## Plot colors
@@ -204,11 +229,19 @@ def main():
             args.min_comp = config.get('min_comp', 512)
             args.molecular_emb_path = config.get('molecular_emb_path', '../results/molecular/combat_corrected_embeddings.h5ad')
             args.molecular_name = config.get('molecular_name', 'gene')
+            args.dataset = config.get('dataset', 'HER2')
             args.ref_model_emb = config.get('ref_model_emb', '../pipeline/uni/image_embeddings.h5ad')
             args.min_cluster = config.get('min_cluster', 4)
             args.max_cluster = config.get('max_cluster', 10)
             args.cluster_step = config.get('cluster_step', 1)
+            args.fixed_n_clusters = config.get('fixed_n_clusters', None)
+            args.no_strategy_silhouette_then_batch_effect = not config.get('strategy_silhouette_then_batch_effect', True)
+            
+            
     sns.set_palette(a)
+    
+    # Convert the negative flag to positive variable
+    strategy_silhouette_then_batch_effect = not args.no_strategy_silhouette_then_batch_effect
 
     if args.benchmark_task == "all":
         # Run all benchmark tasks
@@ -226,7 +259,6 @@ def main():
                 engineered_features_type='scMTOP',
                 extension=args.extension,
                 group='tumor',
-                label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
                 min_comp=args.min_comp,
                 algo=args.clustering_algo,
                 pct_variance=args.pct_variance,
@@ -240,6 +272,9 @@ def main():
                 min_cluster=args.min_cluster,
                 max_cluster=args.max_cluster,
                 cluster_step=args.cluster_step,
+                dataset=args.dataset,
+                fixed_n_clusters=args.fixed_n_clusters,
+                strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect,
             )
     else:
         # Run the specified benchmark task
@@ -256,7 +291,6 @@ def main():
             engineered_features_type='scMTOP',
             extension=args.extension,
             group='tumor',
-            label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
             min_comp=args.min_comp,
             algo=args.clustering_algo,
             pct_variance=args.pct_variance,
@@ -270,6 +304,9 @@ def main():
             min_cluster=args.min_cluster,
             max_cluster=args.max_cluster,
             cluster_step=args.cluster_step,
+            dataset=args.dataset,
+            fixed_n_clusters=args.fixed_n_clusters,
+            strategy_silhouette_then_batch_effect=strategy_silhouette_then_batch_effect,
         )
 
 if __name__ == "__main__":

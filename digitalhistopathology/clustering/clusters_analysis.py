@@ -124,6 +124,9 @@ class ClustersAnalysis:
                     idx_samples_cluster1 = [self.emb.obs.index.get_loc(x) for x in samples_cluster1]
                     samples_cluster2 = self.emb.obs[self.emb.obs[cluster_col] == cluster2].index
                     idx_samples_cluster2 = [self.emb.obs.index.get_loc(x) for x in samples_cluster2]
+                    
+                    print(f"Number of samples in {cluster1}: {len(idx_samples_cluster1)}")
+                    print(f"Number of samples in {cluster2}: {len(idx_samples_cluster2)}")
 
                     w = quantized_wasserstein(matrix=matrix, 
                                               idx_samples_cluster1=idx_samples_cluster1,
@@ -194,6 +197,8 @@ class ClustersAnalysis:
                 .groupby(by="label")
                 .count()["name_origin"]
             )
+            # if "invasive cancer" not in count.index:
+            #     count["invasive cancer"] = 0
             random_clustering_threshold_invasive_cancer = count["invasive cancer"] / count.sum()
             print(
                 "Fraction of invasive cancer in cluster if random cluster assignement = {}".format(

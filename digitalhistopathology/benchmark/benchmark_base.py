@@ -12,6 +12,7 @@ import anndata
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.engineered_features.engineered_features import EngineeredFeatures, scMTOP_EngineeredFeatures
 from digitalhistopathology.embeddings.embedding import Embedding
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset, VisiumHDdataset
 import glob
 
 class BenchmarkBase:
@@ -31,7 +32,7 @@ class BenchmarkBase:
                  engineered_features_type='scMTOP',
                  extension='png',
                  group='tumor',
-                 label_files=glob.glob("../data/HER2_breast_cancer/meta/*.tsv"),
+                 dataset="HER2",
                  ):
         
 
@@ -63,9 +64,19 @@ class BenchmarkBase:
             os.makedirs(self.saving_folder, exist_ok=True)
 
 
-        self.patches_filenames = sorted(glob.glob(os.path.join(self.results_folder, "compute_patches/{}/*.tiff".format(self.dataset_name))))
-        self.patches_info_filename = os.path.join(self.results_folder, "compute_patches/{}/patches_info.pkl.gz".format(self.dataset_name))
-        self.label_files = label_files
+        self.patches_filenames = sorted(glob.glob(os.path.join(self.results_folder, "{}/compute_patches/all/*.tiff".format(self.dataset_name))))
+        self.patches_info_filename = os.path.join(self.results_folder, "{}/compute_patches/all/patches_info.pkl.gz".format(self.dataset_name))
+        
+        if dataset == "HER2":
+            self.dataset = HER2Dataset()
+        elif dataset == "TNBC":
+            self.dataset = TNBCDataset()
+        elif dataset == "Ovarian":
+            self.dataset = VisiumHDdataset(name="Ovarian")
+        else:
+            raise ValueError(f"Dataset {dataset} not recognized. Please use 'HER2' or 'TNBC'.")
+        
+        self.label_files = self.dataset.label_filenames
         print(f"Label files: {self.label_files}")
         self.group = group
         self.embeddings_per_slide = None
@@ -110,38 +121,41 @@ class BenchmarkBase:
             None
         """
 
-
-        if self.engineered_features_type == 'scMTOP':
-            # We load the engineered features
-            print("Loading scMTOP engineered features...", flush=True)
-            ef = scMTOP_EngineeredFeatures(patches_info_filename=self.patches_info_filename,
-                                saving_plots=True,
-                                emb_df_csv=self.emb_df_csv_path,
-                                dataset_name=self.dataset_name,
-                                result_saving_folder=self.engineered_features_saving_folder,
-                                label_files=self.label_files)
-            
+        if self.engineered_features_saving_folder is None:
+            self.ef = None
         else:
-            ef = EngineeredFeatures(patches_info_filename=self.patches_info_filename,
-                                    result_saving_folder=self.engineered_features_saving_folder,
+            if self.engineered_features_type == 'scMTOP':
+                # We load the engineered features
+                print("Loading scMTOP engineered features...", flush=True)
+                ef = scMTOP_EngineeredFeatures(patches_info_filename=self.patches_info_filename,
                                     saving_plots=True,
                                     emb_df_csv=self.emb_df_csv_path,
-                                    dataset_name=self.dataset_name, 
+                                    dataset_name=self.dataset_name,
+                                    result_saving_folder=self.engineered_features_saving_folder,
                                     label_files=self.label_files)
-        ef.load_emb_df()
-        ef.fill_emb()
+                
+            else:
+                ef = EngineeredFeatures(patches_info_filename=self.patches_info_filename,
+                                        result_saving_folder=self.engineered_features_saving_folder,
+                                        saving_plots=True,
+                                        emb_df_csv=self.emb_df_csv_path,
+                                        dataset_name=self.dataset_name, 
+                                        label_files=self.label_files)
+            ef.load_emb_df()
+            ef.fill_emb()
 
-        self.ef = ef
 
-        # Check that the engineered features are ordered with the same indexes
-        indexes = self.image_embeddings[self.pipelines_list[0]].emb.obs_names
-        self.ef.emb = self.ef.emb[indexes,:]
+            self.ef = ef
 
-        # Remove nans
-        df = self.ef.emb.to_df()
-        df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        df.fillna(df.mean(), inplace=True)
-        self.ef.emb.X = df
+            # Check that the engineered features are ordered with the same indexes
+            indexes = self.image_embeddings[self.pipelines_list[0]].emb.obs_names
+            self.ef.emb = self.ef.emb[indexes,:]
+
+            # Remove nans
+            df = self.ef.emb.to_df()
+            df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            df.fillna(df.mean(), inplace=True)
+            self.ef.emb.X = df
 
     
     def compute_image_embeddings(self):
@@ -164,6 +178,7 @@ class BenchmarkBase:
         
         image_embeddings = {}
         for path_to_pipeline, model in zip(self.path_to_pipelines, self.pipelines_list):
+            print(f"Loading image embeddings for model {model}... at {os.path.join(path_to_pipeline, self.image_embedding_name)}", flush=True)
             emb = anndata.read_h5ad(os.path.join(path_to_pipeline, self.image_embedding_name))
             image_emb = ImageEmbedding(patches_filenames=self.patches_filenames, 
                                        patches_info_filename=self.patches_info_filename, 
@@ -214,6 +229,7 @@ class BenchmarkBase:
             subset_emb = ImageEmbedding()
             subset_emb.emb = whole_emb.emb[~whole_emb.emb.obs['label'].isna()]
             subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+            subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'undetermined']
             annotated_embeddings[model] = subset_emb
         
         self.annotated_embeddings = annotated_embeddings
@@ -222,6 +238,7 @@ class BenchmarkBase:
             subset_emb = Embedding()
             subset_emb.emb = self.ef.emb[~self.ef.emb.obs['label'].isna()]
             subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+            subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'undetermined']
             self.annotated_embeddings['handcrafted_features'] = subset_emb
 
 
@@ -244,17 +261,18 @@ class BenchmarkBase:
                 embeddings_per_slide[model][slide] = subset_emb
         
         # Do it also for handcrafted features
-        embeddings_per_slide['handcrafted_features'] = {}
-        for slide in self.ef.emb.obs[slide_id_col].unique():
+        if self.ef is not None:
+            embeddings_per_slide['handcrafted_features'] = {}
+            for slide in self.ef.emb.obs[slide_id_col].unique():
 
-            subset_emb = ImageEmbedding()
-            subset_emb.emb = self.ef.emb[self.ef.emb.obs[slide_id_col] == slide]
+                subset_emb = ImageEmbedding()
+                subset_emb.emb = self.ef.emb[self.ef.emb.obs[slide_id_col] == slide]
 
-            if only_labeled:
-                subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
-                subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
+                if only_labeled:
+                    subset_emb.emb = subset_emb.emb[~subset_emb.emb.obs['label'].isna()]
+                    subset_emb.emb = subset_emb.emb[subset_emb.emb.obs['label'] != 'nan']
 
-            embeddings_per_slide['handcrafted_features'][slide] = subset_emb
+                embeddings_per_slide['handcrafted_features'][slide] = subset_emb
 
         self.embeddings_per_slide = embeddings_per_slide
 
