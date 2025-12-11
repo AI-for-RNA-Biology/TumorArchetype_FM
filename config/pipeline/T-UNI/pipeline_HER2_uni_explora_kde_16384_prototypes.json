@@ -1,7 +1,0 @@
-{
-  "model_name": "uni",
-  "retrained_model_path": "../pretrained_models/extended_uni/HER2/HER2_uni_explora_kde_16384_prototypes/epoch_1.pth",
-  "patches_folder": "../results/HER2/compute_patches/all/",
-  "pipeline_name": "HER2_uni_explora_kde_16384_prototypes",
-  "results_folder": "../results/"
-}

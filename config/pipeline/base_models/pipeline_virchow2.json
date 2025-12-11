@@ -1,8 +1,0 @@
-{
-  "model_name": "virchow2",
-  "retrained_model_path": "",
-  "patches_folder": "../results/HER2/compute_patches/all/",
-  "pipeline_name": "virchow2",
-  "results_folder": "../results/",
-  "dataset": "HER2"
-}
