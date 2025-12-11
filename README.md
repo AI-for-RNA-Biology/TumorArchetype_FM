@@ -1,4 +1,4 @@
-# Extended pre-training of histopathology foundation models uncovers co-existing breast cancer archetypes characterized by RNA splicing or TGF-β dysregulation
+# Image-Based Discovery of a Recurrent Tumor Archetype Characterized by Aberrant RNA Splicing and Associated with Poor Survival in Breast Cancer
 
 ## Overview
 Here, we develop a pipeline to systematically evaluate the biological concepts encoded within histopathology foundation models (hFMs) using molecular data. We also perform extended-pretraining of [UNI](https://github.com/mahmoodlab/UNI) to identify optimal conditions that enhance the model’s ability to encode richer, tumor tissue-specific biological concepts.
@@ -7,15 +7,36 @@ This code was developed on a 64-bit Debian GNU/Linux system (x86_64), running ke
 
 ## 1. Installation
 
-The environment can be installed via conda, with (`environment.yml`) or without (`environment_no_builds.yml`) platform-specific build constraints:
-
+Clone the repository, and initialize the submodules:
 ```bash
-conda env create -f environment.yml
+git clone git@github.com:AI-for-RNA-Biology/TumorArchetype_FM.git # using SSH
+cd TumorArchetype_FM
+git submodule update --init --recursive
 ```
 
-Please change the prefix before creating the environement at the end of the file.
+The environment can be installed via conda:
+```bash
+conda env create -f environment.yaml
+```
 
-**BE CAREFUL: If you want to run CTransPath you will a specific version of the timm library.**
+After the installation, you can activate the environment with:
+```bash
+conda activate digitalhisto
+```
+
+Then add the following libraries with the commands:
+```bash
+pip install stlearn --no-deps --force-reinstall
+pip install graphviz --no-deps --force-reinstall
+```
+
+Install R packages:
+```bash
+R -e 'if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager"); BiocManager::install("EBImage")'
+```
+
+
+**BE CAREFUL: If you want to run CTransPath you will need a specific version of the timm library.**
 
 Go to their [Github page](https://github.com/Xiyue-Wang/TransPath) under 1.CTransPath and install the modified timm library on top of the anaconda environment.
 When you want to run other foundation models like Uni or ProvGigaPath, override the timm library with version 1.0.7:
@@ -24,7 +45,7 @@ When you want to run other foundation models like Uni or ProvGigaPath, override 
 pip install timm==1.0.7
 ```
 
-If you want to be safer, create two anaconda environements starting from the yml file with one specific to CTransPath and one for the other models.
+If you want to be safer, create two anaconda environements starting from the yaml file with one specific to CTransPath and one for the other models.
 
 The typical installation time in around 25 minutes.
 
@@ -34,18 +55,29 @@ The typical installation time in around 25 minutes.
 
 The data can be downloaded from [Zenodo](https://zenodo.org/records/4751624).
 
-- Rename the principal folder as `HER2_breast_cancer`
+- Rename the principal folder as `HER2`
 - Unzip all the folders: `count-matrices.zip`, `images.zip`, `meta.zip` and `spot-selections.zip`
 - Place the principal folder in `data/`
 
-All other new datasets can be added by creating a new class in `digitalhistopathology/datasets/real_datasets.py`
+### Triple negative breast cancer dataset [[2](#ref10)]
 
+The data can be downloaded from [Zenodo](https://zenodo.org/records/8135722).
+
+- Rename the principal folder as `TNBC`
+- Unzip all the folders
+- Place the principal folder in `data/`
+
+All other new datasets can be added by creating a new class in `digitalhistopathology/datasets/real_datasets.py`
 
 ## 3. HuggingFace Hub
 
 UNI and Prov-GigaPath are pretrained models whose access must be granted before using them. You must have a hugging face account, agree to the outlined terms of use, and request access.
 
-Your hugging face access tokens (must remain private) should be set in `digitalhistopathology/access_token.py` or as read-only token as an environment variable: `export HF_TOKEN=<MY_READ_ONLY_TOKEN>`. If set, this value will overwrite the token stored on the machine (in either `HF_TOKEN_PATH` or `HF_HOME/token` if the former is not set). The first time loading the model, the weights will be downloaded to the hugging face hub cache in your home directory (`~/.cache/huggingface/hub`).
+Your hugging face access tokens (must remain private) should be set in a new file `digitalhistopathology/access_token.py` with the following content:
+```python
+READ_ONLY_HF_TOKEN = "hf_xxxxxxxxxxxxxxxxxxx"
+```
+The first time loading the model, the weights will be downloaded to the hugging face hub cache in your home directory (`~/.cache/huggingface/hub`).
 
 More information on [cache management](https://huggingface.co/docs/datasets/en/cache) and on [environment variables](https://huggingface.co/docs/huggingface_hub/en/package_reference/environment_variables).
 
@@ -83,45 +115,47 @@ The following pipeline aims at reproducing the results from the original paper.
 
 ### Description
 
-Here are the different steps of the pipeline that needs a model and a name to be initialized.
+Here are the different steps of the pipeline that needs a dataset, a model and a name to be initialized.
 
-### 5.1. Compute patches HER2-positive breast cancer dataset:
+### 5.1. Compute patches:
 
-First, we need to compute patches from the HER2 dataset. This can be done using the script `scripts/compute_patches_HER2.py`.
-The resulting patches will be produced in the `results/compute_patches/her2_final_without_A/` folder. Patient A has been excluded from the analysis for suspicion of technical bias.
+First, we need to compute patches from the desired dataset. This can be done using the script `scripts/compute_patches.py`, which takes one argument:
+- `--dataset`: Dataset to process. Choose among "HER2" and "TNBC". Default is "HER2".
 
 Example usage: 
+```bash
+python scripts/compute_patches.py --dataset "HER2"
 ```
-python scripts/compute_patches_HER2.py
-```
+The resulting patches will be produced in the `results/{dataset}/compute_patches/all/` folder. 
 
-### 5.2. Compute image embeddings HER2-positive breast cancer dataset and k-NN selection of invasive cancer patches:
+__Note: For HER2 dataset, patient A has been excluded from the analysis for suspicion of technical bias.__
+
+### 5.2. Compute image embeddings and k-NN selection of invasive cancer patches:
 
 This step is made to compute the embeddings using a pre-trained model, and to apply k-NN on them to extract the patches classified as "invasive cancer patches". The shannon entropy computed on the explained variance distribution of SVD components is also computed, and molecular data are formatted for later use. This is done using the script `scripts/pipeline.py`. 
 
 Here are the arguments you need to provide:
-- `--model_name`: the pretrained model to be used. The supported values are `uni`, `ctranspath`, `provgigapath`, `simclr`, `virchow`. You can add other models in `digitalhistopathology/models.py`.
-- `--retrained_model_path`: if you retrained the pre-trained model and want to extract the associated embeddings, specifiy the path to the weights file. 
-- `--patches_folder`: folder to the patches dataset you want to compute the embeddings from. Default is `results/compute_patches/her2_final_without_A/`.
-- `--pipeline_name`: how you want to name the pipeline
-- `--results_folder`: folder to save the embeddings. 
-All results will be saved at `{results_folder}/{pipeline_name}/`.
-- `--dataset`: dataset name. Choose among "HER2" and "TNBC". Default is "HER2".
-
+- `--model_name`: Pretrained model to be used. The supported values are "uni", "ctranspath", "provgigapath", "simclr", "virchow". You can add other models in `digitalhistopathology/models.py`. Default is "uni".
+- `--retrained_model_path`: If you retrained the pre-trained model and want to extract the associated embeddings, specifiy the path to the weights file. 
+- `--patches_folder`: Folder to the patches dataset you want to compute the embeddings from. Default is `results/HER2/compute_patches/all/`.
+- `--pipeline_name`: How you want to name the pipeline
+- `--results_folder`: Folder to save the embeddings. Default is `results/`.
+- `--dataset`: Dataset name. Choose among "HER2" and "TNBC". Default is "HER2".
+All results will be saved at `{results_folder}/{dataset}/pipeline/{pipeline_name}/`.
 
 In more details here are the steps:
-- Patches image embeddings will be computed and saved as `{results_folder}/{pipeline_name}/image_embedding.h5ad`:
+- Patches image embeddings will be computed and saved as `{results_folder}/{dataset}/pipeline/{pipeline_name}/image_embedding.h5ad`:
 - Select invasive cancer patches by computing KNN on `image_embeddding` by using label column as training data. At the end, we selected only invasive_cancer label to go more in depth into tumor heterogeneity.
-   - Boxplot of the F1 and accuracy across patient to choose the optimal k of knn and barplots with patient and label fraction in each knn cluster are saved in the folder `{results_folder}/{pipeline_name}/select_invasive_cancer`.
-   - The invasive images embedding is saved under `{results_folder}/{pipeline_name}/invasive_image_embedding.h5ad`.
-- Shannon entropy is computed on the SVD decomposition and results are saved in the folder `{results_folder}/{pipeline_name}/shannon_entropy`.
+   - Boxplot of the F1 and accuracy across patient to choose the optimal k of knn and barplots with patient and label fraction in each knn cluster are saved in the folder `{results_folder}/{dataset}/pipeline/{pipeline_name}/select_invasive_cancer`.
+   - The invasive images embedding is saved under `{results_folder}/{dataset}/pipeline/{pipeline_name}/invasive_image_embedding.h5ad`.
+- Shannon entropy is computed on the SVD decomposition and results are saved in the folder `{results_folder}/{dataset}/pipeline/{pipeline_name}/shannon_entropy`.
 
-Example usage to extract embeddings from SimCLR
-```
-python scripts/pipeline.py --model_name simclr --patches_folder ../results/compute_patches/her2_final_without_A/ --pipeline_name simclr --results_folder ../results/pipeline --embedding_name image_embedding 
+Example usage to extract embeddings from UNI using HER2 dataset:
+```bash
+python scripts/pipeline.py --model_name uni --patches_folder results/HER2/compute_patches/all/ --pipeline_name uni --results_folder results/HER2 --dataset HER2
 ```
 
-Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `script/compute_embeddings.py` that takes the same arguments. 
+Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `scripts/compute_embeddings.py` that takes the same arguments. 
 
 This step requires a GPU. It was run on a rtx3090 GPU, 12 CPUs and 128GB of RAM. You can also compute without GPU as it is useful only for inference. It lasts around 20 minutes.
 
@@ -129,20 +163,21 @@ The config files for this step and all models are available under `config/pipeli
 
 ### 5.3. Create the folder for invasive cancer patches only:
 
-This step enables to create a new patches dataset, subset of the original dataset and filtered using a csv file. It is done with the script `script/create_subset_hdf5.py` that takes three arguments:
+This step enables to create a new patches dataset, subset of the original dataset and filtered using a csv file. It is done with the script `scripts/create_subset_hdf5.py` that takes three arguments:
 
 - `--original_hdf5`: Path to the original HDF5 file.
 - `--csv_path`: Path to the CSV file containing the names of the patches to include.
 - `--new_hdf5`: Path to save the new HDF5 file.
 
 
-In the context of our study, we were interested in the invasive cancer patches, and after the kNN-relabeling of step 2, we created a filtered dataset to keep only the patches relabeled as "invasive cancer" from the pipeline applied to SimCLR embeddings.
+In the context of our study, we were interested in the invasive cancer patches, and after the kNN-relabeling of step 2, we created a filtered dataset to keep only the patches relabeled as "invasive cancer" from the pipeline applied to the embeddings.
 
-```python
+Example usage with UNI model and HER2 dataset:
+```bash
 python scripts/create_subset_hdf5.py \
-    --original_hdf5 ../results/compute_patches/her2_final_without_A/patches.hdf5 \
-    --csv_path ../pipeline/simclr/select_invasive_cancer/selected_invasive_cancer.csv \
-    --new_hdf5 ../results/compute_patches/filtered/patches.hdf5
+--original_hdf5 results/HER2/compute_patches/all/patches.hdf5 \
+--csv_path results/HER2/pipeline/uni/select_invasive_cancer/selected_invasive_cancer.csv \
+--new_hdf5 results/HER2/compute_patches/invasive/patches.hdf5
 ``` 
 
 This step is really fast and can be run on a single CPU with 16GB of memory. 
@@ -151,23 +186,23 @@ This step is really fast and can be run on a single CPU with 16GB of memory.
 
 **5.4.1. Perform extended-pretraining**:
 
-In this step, we performed extended pre-training of UNI, using the invasive cancer patches selected above. The final models are called T-UNI models. Different T-UNI models have been generated, varying the extended pretraining strategy (full or ExPLoRa), the loss (KDE or KoLeo), and finally, the number of prototypes. All used config files are available in `dinov2/configs`. The script to perform extended pre-training is `dinov2/dinov2/train/train.py` and can be used as follows:
+In this step, we performed extended pre-training of UNI, using the invasive cancer patches selected above. The final models are called T-UNI models. Different T-UNI models have been generated, varying the extended pretraining strategy (full or ExPLoRa), the loss (KDE or KoLeo), and finally, the number of prototypes. All used config files are available in `config/extended_pretraining`. The script to perform extended pre-training is `dinov2/dinov2/train/train.py` and can be used as follows:
 
 ```bash
-PYTHONPATH=$(pwd) python dinov2/train/train.py path_to_your_config_file
+PYTHONPATH=$(pwd)/dinov2 python dinov2/dinov2/train/train.py config/extended_pretraining/{dataset}/{config_file}.yaml
 ```
 
-For more information about the extended pretraining, please see the [dinov2 README](./dinov2/README.md). Note that you will need another environment to run it. The [model card](./dinov2/MODEL_CARD_T_UNI.md) is available for the T-UNI models. You can also download direclty the model weights on [Zenodo](https://zenodo.org/records/15053890) and place them in the folder `dinov2/extended_pretrained_models`. For the rest of the code to run, please put each model in a directory named with the model name and adding `HER2_` at the beginning. Then rename the weights file as `epoch_1.pth`.
+For more information about the extended pretraining, please see the [dinov2 README](https://github.com/AI-for-RNA-Biology/dinov2/tree/19a441962b97527abc3a8ca2da8a2938aa7c663e/README.md). Note that you will need another environment to run it. The [model card](./dinov2/MODEL_CARD_T_UNI.md) is available for the T-UNI models. You can also download direclty the model weights on [Zenodo](https://zenodo.org/records/15053890) and place them in the folder `pretrained_models/{dataset}`. For the rest of the code to run, please put each model in a directory named with the model name, then rename the weights file as `epoch_1.pth`.
 
 Example: 
-When you download the model `uni_full_kde_16384_prototypes.pth` on Zenodo, place it into `dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes/epoch_1.pth`.
+When you download the model `HER2_uni_full_kde_16384_prototypes.pth` on Zenodo, place it into `pretrained_models/HER2/HER2_uni_full_kde_16384_prototypes/epoch_1.pth`.
 
 **5.4.2 Run the embedding extraction on the extended pre-trained models**:
 
-Example usage to extract embeddings from a retrained version of UNI located in `dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes` under `epoch_1.pth`:
+Example usage to extract embeddings from a retrained version of UNI located in `pretrained_models/HER2/HER2_uni_full_kde_16384_prototypes` under `epoch_1.pth`:
 
-```
-python scripts/pipeline.py --model_name uni --retrained_model_path dinov2/extended_pretrained_models/HER2_uni_full_kde_16384_prototypes/epoch_1.pth --patches_folder results/compute_patches/her2_final_without_A/ --pipeline_name HER2_uni_full_kde_16384_prototypes --results_folder results/pipeline --embedding_name image_embedding
+```bash
+python scripts/pipeline.py --model_name uni --retrained_model_path pretrained_models/HER2/HER2_uni_full_kde_16384_prototypes/epoch_1.pth --patches_folder results/HER2/compute_patches/ --pipeline_name HER2_uni_full_kde_16384_prototypes --results_folder results/HER2/pipeline 
 ```
 
 The config files to extract embeddings from all T-UNI models are available under `config/pipeline/T-UNI`.
@@ -178,70 +213,69 @@ In this step, segmentation of the nuclei has been performed using CellViT [[9](#
 
 **5.5.1 Nuclei segmentation using CellViT**:
 
-The [CellViT](./CellViT/) folder is a Git subtree cloned from the [original repository](https://github.com/TIO-IKIM/CellViT), with only minimal modifications made to adapt it to our environment. To segment the HER2 dataset using CellViT, you can use the script `digitalhistopathology/engineered_features/cell_segmentor.py` using the following arguments: 
+The [CellViT](./CellViT/) folder is a Git subtree cloned from the [original repository](https://github.com/TIO-IKIM/CellViT), with only minimal modifications made to adapt it to our environment. 
 
-To run the segmentation, you need to set up a specific environment for CellViT:
-
+First, you need to set up the CellViT environment:
 ```bash
 conda env create -f cellvit_env.yml
 conda activate cellvit_env
 ```
 
-Here are the key parameters for the `digitalhistopathology/engineered_features/cell_segmentor.py` script:
-- `--segmentation_mode`: The segmentation mode to use. For CellViT, set this to `"cellvit"`.
-- `--magnification`: The magnification level of the images (e.g., 20x).
+Then run the segmentation using the script `digitalhistopathology/engineered_features/cell_segmentor.py`, with the following arguments: 
+- `--segmentation_mode`: Segmentation mode to use. For CellViT, set this to "cellvit".
+- `--magnification`: Magnification level of the images (e.g., 20x).
 - `--mpp`: Microns per pixel for the images.
-- `--list_wsi_filenames`: List of paths to the wsi to process
+- `--patches_info_filename`: File containing metadata about image patches.
+- `--list_wsi_filenames`: List of whole slide image filenames to process.
 - `--dataset_name`: Name of the dataset being processed.
 - `--model_path`: Path to the pretrained CellViT model weights.
 - `--results_saving_folder`: Directory where the segmentation results will be saved.
 
-Usage:
+__Note: If `--patches_info_filename` is provided, the `--list_wsi_filenames` argument will be ignored. Use `--list_wsi_filenames` when you need to process specific individual files.__
+
+Example usage for HER2 dataset:
 ```bash
-python3 digitalhistopathology/engineered_features/cell_segmentor.py \
+PYTHONPATH=$(pwd)/CellViT python3 digitalhistopathology/engineered_features/cell_segmentor.py \
 --segmentation_mode "cellvit" \
 --magnification 20 \
 --mpp 1 \
---list_wsi_filenames "../../data/HER2_breast_cancer/images/HE/B1.jpg ../../data/HER2_breast_cancer/images/HE/B2.jpg ../../data/HER2_breast_cancer/images/HE/B3.jpg ../../data/HER2_breast_cancer/images/HE/B4.jpg ../../data/HER2_breast_cancer/images/HE/B5.jpg ../../data/HER2_breast_cancer/images/HE/B6.jpg ../../data/HER2_breast_cancer/images/HE/C1.jpg ../../data/HER2_breast_cancer/images/HE/C2.jpg ../../data/HER2_breast_cancer/images/HE/C3.jpg ../../data/HER2_breast_cancer/images/HE/C4.jpg ../../data/HER2_breast_cancer/images/HE/C5.jpg ../../data/HER2_breast_cancer/images/HE/C6.jpg ../../data/HER2_breast_cancer/images/HE/D1.jpg ../../data/HER2_breast_cancer/images/HE/D2.jpg ../../data/HER2_breast_cancer/images/HE/D3.jpg ../../data/HER2_breast_cancer/images/HE/D4.jpg ../../data/HER2_breast_cancer/images/HE/D5.jpg ../../data/HER2_breast_cancer/images/HE/D6.jpg ../../data/HER2_breast_cancer/images/HE/E1.jpg ../../data/HER2_breast_cancer/images/HE/E2.jpg ../../data/HER2_breast_cancer/images/HE/E3.jpg ../../data/HER2_breast_cancer/images/HE/F1.jpg ../../data/HER2_breast_cancer/images/HE/F2.jpg ../../data/HER2_breast_cancer/images/HE/F3.jpg ../../data/HER2_breast_cancer/images/HE/G1.jpg ../../data/HER2_breast_cancer/images/HE/G2.jpg ../../data/HER2_breast_cancer/images/HE/G3.jpg ../../data/HER2_breast_cancer/images/HE/H1.jpg ../../data/HER2_breast_cancer/images/HE/H2.jpg ../../data/HER2_breast_cancer/images/HE/H3.jpg" \
---dataset_name "her2_final_without_A" \
---model_path "../../CellViT/models/pretrained/CellViT-SAM-H-x20.pth" \
---results_saving_folder "../../results/"
+--patches_info_filename "results/HER2/compute_patches/all/patches_info.pkl.gz" \
+--dataset_name "HER2" \
+--model_path "../../CellViT/models/pretrained/" \
+--results_saving_folder "results/"
 ```
-The results will be saved in `results/segmentation/CellViT/her2_final_without_A`.
 
-This step took around 30 minutes on a h100 GPU with 12 cpus per task and 64GB of memory. 
+The results will be saved in `results/{dataset}/segmentation/`. This step took around 30 minutes on a h100 GPU with 12 cpus per task and 64GB of memory for the HER2 dataset.
 
 **5.5.2 Handcrafted features computation**: 
 
 This step computes handcrafted features such as morphology, texture, and color descriptors of nuclei and extracellular matrix. It also includes Zernike moments for nuclei and cell type composition statistics.
 
 Here are the parameters for the `digitalhistopathology/engineered_features/engineered_features.py` script:
-- `--method`: The feature extraction method to use (e.g., morphology, texture, color).
+- `--method`: Feature extraction method to use (e.g., morphology, texture, color).
 - `--path_to_cellvit_folder`: Path to the folder containing CellViT segmentation results.
 - `--result_saving_folder`: Directory where the computed features will be saved.
 - `--dataset_name`: Name of the dataset being processed.
-- `--temporary_folder`: Temporary directory for intermediate computations.
 - `--patches_info_filename`: File containing metadata about image patches.
 - `--list_wsi_filenames`: List of whole slide image filenames to process.
 - `--save_individual_wsi`: Flag to save results for each WSI individually.
 - `--zernike_per_nuclei`: Flag to compute Zernike moments for each nucleus.
 - `--num_cores`: Number of CPU cores to use for parallel processing.
 
-Example usage:
+__Note: If `--patches_info_filename` is provided, the `--list_wsi_filenames` argument will be ignored. Use `--list_wsi_filenames` when you need to process specific individual files.__
+
+Example for HER2 dataset without Zernike moments:
 ```bash
-python3 engineered_features.py \
---method scMTOP \
---path_to_cellvit_folder ../results/segmentation/CellViT/her2_final_without_A \
---result_saving_folder ../results/engineered_features/scMTOP/with_zernike \
---dataset_name her2_final_without_A \
---temporary_folder ../tmp \
---patches_info_filename ../results/computes_patches/her2_final_without_A/patches_info.pkl.gz \
---list_wsi_filenames "../../data/HER2_breast_cancer/images/HE/B1.jpg ../../data/HER2_breast_cancer/images/HE/B2.jpg ../../data/HER2_breast_cancer/images/HE/B3.jpg ../../data/HER2_breast_cancer/images/HE/B4.jpg ../../data/HER2_breast_cancer/images/HE/B5.jpg ../../data/HER2_breast_cancer/images/HE/B6.jpg ../../data/HER2_breast_cancer/images/HE/C1.jpg ../../data/HER2_breast_cancer/images/HE/C2.jpg ../../data/HER2_breast_cancer/images/HE/C3.jpg ../../data/HER2_breast_cancer/images/HE/C4.jpg ../../data/HER2_breast_cancer/images/HE/C5.jpg ../../data/HER2_breast_cancer/images/HE/C6.jpg ../../data/HER2_breast_cancer/images/HE/D1.jpg ../../data/HER2_breast_cancer/images/HE/D2.jpg ../../data/HER2_breast_cancer/images/HE/D3.jpg ../../data/HER2_breast_cancer/images/HE/D4.jpg ../../data/HER2_breast_cancer/images/HE/D5.jpg ../../data/HER2_breast_cancer/images/HE/D6.jpg ../../data/HER2_breast_cancer/images/HE/E1.jpg ../../data/HER2_breast_cancer/images/HE/E2.jpg ../../data/HER2_breast_cancer/images/HE/E3.jpg ../../data/HER2_breast_cancer/images/HE/F1.jpg ../../data/HER2_breast_cancer/images/HE/F2.jpg ../../data/HER2_breast_cancer/images/HE/F3.jpg ../../data/HER2_breast_cancer/images/HE/G1.jpg ../../data/HER2_breast_cancer/images/HE/G2.jpg ../../data/HER2_breast_cancer/images/HE/G3.jpg ../../data/HER2_breast_cancer/images/HE/H1.jpg ../../data/HER2_breast_cancer/images/HE/H2.jpg ../../data/HER2_breast_cancer/images/HE/H3.jpg" \--save_individual_wsi \
---zernike_per_nuclei \
---num_cores 12
+PYTHONPATH=$(pwd)/CellViT python3 digitalhistopathology/engineered_features/engineered_features.py \
+--method "scMTOP" \
+--path_to_cellvit_folder "results/HER2/segmentation/" \
+--result_saving_folder "results/HER2/engineered_features/scMTOP/" \
+--dataset_name "HER2" \
+--patches_info_filename "results/HER2/compute_patches/all/patches_info.pkl.gz" \
+--num_cores 16
 ```
 
-The results will be saved in `results/engineered_features/scMTOP/with_zernike/her_final_without_A`. This step is particularly long to run, especially due to zernike moments computation. It can indeed take up to 7 hours per slide, with 16 CPUs and 24GB of memory. Therefore we recommand lauching the script in parallel for each WSI. In future versions, this script will include built-in parallelism to streamline the process, and the operations will be optimized in order to save computation time. 
+The results will be saved in `results/{dataset}/engineered_features/scMTOP`. This step is particularly long to run, especially due to zernike moments computation. It can indeed take up to 7 hours per slide, with 16 CPUs and 24GB of memory. Therefore we recommand lauching the script in parallel for each WSI. In future versions, this script will include built-in parallelism to streamline the process, and the operations will be optimized in order to save computation time. 
 
 
 ### 5.6 Molecular data preparation
@@ -399,6 +433,7 @@ The notebooks analyze the results obtained in the full pipeline by doing some ad
 - Lisa Fournier
 - Garance Haefliger
 - Albin Vernhes
+- Lena Loye
 
 ## References
 
@@ -429,5 +464,7 @@ The notebooks analyze the results obtained in the full pipeline by doing some ad
 <a name="ref9"></a>
 [9] Hörst, F., et al. “CellViT: Vision Transformers for precise cell segmentation and classification,” Med. Image Anal., vol. 94, p. 103143, May 2024.
 
+<a name="ref10"></a>
+[10] Wang, X., et al. 2024. "Spatial transcriptomics reveals substantial heterogeneity in triple-negative breast cancer with potential clinical implications." Nat Commun 15: 10232.
 
 
