@@ -1,3 +1,3 @@
 [submodule "dinov2"]
 	path = dinov2
-	url = https://github.com/idiap/dinov2.git
+	url = https://github.com/AI-for-RNA-Biology/dinov2.git
