@@ -5,6 +5,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 #
+import os
 import gzip
 import pickle
 import random
@@ -18,8 +19,7 @@ import numpy as np
 import pandas as pd
 import torch
 import sys
-
-sys.path.append("../")
+sys.path.append(os.getcwd())
 import pyvips 
 from pathlib import Path
 import warnings
@@ -27,6 +27,10 @@ import openslide
 import mahotas
 import cv2
 
+import matplotlib
+matplotlib.use("Agg")
+
+import gc
 
 
 from skimage.color import rgb2gray
@@ -48,6 +52,7 @@ import skimage.io as io
 from skimage.measure import label, regionprops
 from skimage.color import rgb2gray
 import datetime
+import time
 from tqdm import tqdm
 
 
@@ -65,7 +70,6 @@ from digitalhistopathology.engineered_features.engineered_utils import (
     get_zernike_moments_per_nuclei
 )
 
-import os
 
 CELL_TYPE_DICT = {1: "T", 2: "I", 3: "S", 5: "N"}
 
@@ -75,17 +79,17 @@ class EngineeredFeatures(ImageEmbedding):
                  saving_plots=False,
                  label_files=None,
                  emb=None,
-                 result_saving_folder="../results/engineered_features",
+                 result_saving_folder="results",
                  name="",
                  emb_df_csv=None,
                  patches_info_filename=None,
-                 dataset_name="dataset", 
+                 dataset_name="HER2", 
                  feature_type_color_dict=None):
         """EngineeredFeatures class contains dimensionally reduction, clustering and visualization techniques to analyze engineered features embeddings. It inherits from Embeddings class.
 
         Args:
             emb (anndata, optional): Embeddings anndata object. Defaults to None.
-            result_saving_folder (str, optional): Result folder in which the results are saved. Defaults to "../results".
+            result_saving_folder (str, optional): Result folder in which the results are saved. Defaults to "results".
             name (str, optional): Name of the embeddings. Defaults to "".
             saving_plots (bool, optional): If the plots are saved to the result folder or not. Defaults to False.
             label_files (list, optional): List of files containing label of each spot, "x" column corresponds to the first spot coordinate, "y" column corresponds to the second. Can be csv, tsv with gzip compression or not. One per sample or the name of the file contain the sample name at the beginning with a "_" just after. Defaults to None.
@@ -98,19 +102,13 @@ class EngineeredFeatures(ImageEmbedding):
                                 label_files=label_files,
                                 patches_info_filename=patches_info_filename,)
         self.dataset_name = dataset_name
-
         self.emb_df_csv = emb_df_csv
         self.feature_type_color_dict = feature_type_color_dict
 
         if self.result_saving_folder is not None:
-            if not os.path.exists(self.result_saving_folder):
-                os.makedirs(self.result_saving_folder, exist_ok=True)
-            
-            self.save_path = os.path.join(self.result_saving_folder, self.dataset_name)
+            self.save_path = self.result_saving_folder
+            os.makedirs(self.save_path, exist_ok=True) 
 
-            if not os.path.exists(self.save_path):
-                os.makedirs(self.save_path, exist_ok=True)
-                
         else:
             self.save_path = None
 
@@ -128,20 +126,18 @@ class EngineeredFeatures(ImageEmbedding):
             Exception: Attribute emb_df is empty
         """
         print("Filling emb...")
-        try:
-            if len(self.emb_df) > 0:
-                print("Emb_df is not empty.")
-                self.emb = ad.AnnData(self.emb_df)
-                if self.patches_info_filename is not None:
-                    print("Loading patches info...")
-                    patches_info_df = self.load_patches_infos()
-                    self.emb.obs = self.emb.obs.merge(patches_info_df, right_index=True, left_index=True)
-            else:
-                self.emb_df = None
-        except:
-            self.emb_df = None
+        if len(self.emb_df) > 0:
+            print("Emb_df is not empty.")
 
-        
+            self.emb = ad.AnnData(self.emb_df)
+
+            if self.patches_info_filename is not None:
+                print("Loading patches info...")
+                patches_info_df = self.load_patches_infos()
+                self.emb.obs = self.emb.obs.merge(patches_info_df, right_index=True, left_index=True)
+        else:
+            raise ValueError("Cannot fill emb because emb_df is empty or None.")
+
     
     def load_emb_df(self):
         """Load emb_df from a file.
@@ -152,8 +148,7 @@ class EngineeredFeatures(ImageEmbedding):
         try:
             self.emb_df = pd.read_csv(self.emb_df_csv, index_col=0)
         except:
-            print("File storing the emf_df doesn't exist - You need to compute the engineered features first.")
-            self.emb_df = None
+            print("File storing the emb_df doesn't exist - You need to compute the engineered features first.")
         # self.emb_df['detection_mask'] = self.emb_df['detection_mask'].apply(lambda x: pickle.loads(eval(x)))
 
     def save_emb(self):
@@ -215,7 +210,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         wsi_names (list): List of WSI names.
         save_path (str): Path to save the results.
     Methods:
-        __init__(self, emb=None, result_saving_folder="../results/engineered_features/scMTOP", name="", saving_plots=False, label_files=None, patches_info_filename=None, path_to_cellvit_folder=None, list_wsi_filenames=None, path_to_wsis=None, emb_df=None, dataset_name="dataset", temporary_folder="../results/tmp"):
+        __init__(self, emb=None, result_saving_folder="results/engineered_features/scMTOP", name="", saving_plots=False, label_files=None, patches_info_filename=None, path_to_cellvit_folder=None, list_wsi_filenames=None, path_to_wsis=None, emb_df=None, dataset_name="dataset", temporary_folder="results/tmp"):
             Initializes the scMTOP_EngineeredFeatures class with the given parameters.
         convertjson_from_cellvit_to_scMTOP(self, cellvit_json_filename):
             Converts JSON files from CellVit format to scMTOP format.
@@ -239,7 +234,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
     
     def __init__(self, 
                  emb=None, 
-                 result_saving_folder="../results/engineered_features/scMTOP", 
+                 result_saving_folder="results/HER2/engineered_features/scMTOP", 
                  name="", 
                  saving_plots=False, 
                  label_files=None,
@@ -248,14 +243,14 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                  list_wsi_filenames=None,
                  path_to_wsis=None,
                  emb_df_csv=None,
-                 dataset_name="dataset",
-                 temporary_folder="../results/tmp",
+                 dataset_name="HER2",
+                 temporary_folder="results/tmp",
                  feature_type_color_dict=None):
         """Initializes the scMTOP_EngineeredFeatures class with the given parameters.
 
         Args:
             emb (anndata, optional): Embeddings anndata object. Defaults to None.
-            result_saving_folder (str, optional): Folder to save results. Defaults to "../results/engineered_features/scMTOP".
+            result_saving_folder (str, optional): Folder to save results. Defaults to "results/HER2/engineered_features/scMTOP".
             name (str, optional): Name of the embeddings. Defaults to "".
             saving_plots (bool, optional): If the plots are saved to the result folder or not. Defaults to False.
             label_files (list, optional): List of files containing label of each spot, "x" column corresponds to the first spot coordinate, "y" column corresponds to the second. Can be csv, tsv with gzip compression or not. One per sample or the name of the file contain the sample name at the beginning with a "_" just after. Defaults to None.
@@ -265,7 +260,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
             path_to_wsis (str, optional): Path to whole slide images. Defaults to None.
             emb_df (pd.DataFrame, optional): DataFrame containing embeddings. Defaults to None.
             dataset_name (str, optional): Name of the dataset. Defaults to "dataset".
-            temporary_folder (str, optional): Temporary folder for intermediate files. Defaults to "../results/tmp".
+            temporary_folder (str, optional): Temporary folder for intermediate files. Defaults to "results/tmp".
         """
         
         
@@ -295,11 +290,12 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         else:
             warnings.warn("path_to_wsis, list_wsi_filenames and patches_info_filename cannot be all None. If you want \
                           to compute the scMTOP features, you need to provide at least one of these parameters.")
+        self.patch_name_to_info = {p['name']: p for p in self.patches_info}
 
         self.temporary_folder = temporary_folder
         self.path_to_cellvit_folder = path_to_cellvit_folder
         self.path_to_wsis = path_to_wsis
-        self.result_saving_folder =result_saving_folder
+        self.result_saving_folder = result_saving_folder
         self.emb_df_csv = emb_df_csv
 
         if self.list_wsi_filenames is not None:
@@ -314,13 +310,14 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
 
 
         if self.path_to_cellvit_folder is not None:
-            cellvit_paths = glob.glob(os.path.join(self.path_to_cellvit_folder, '*'))
-
+            # Ensure that the path_to_cellvit_folder is a directory (avoid processed.json)
+            cellvit_paths = [p for p in glob.glob(os.path.join(self.path_to_cellvit_folder, '*')) if os.path.isdir(p)]
 
             wsi_cell_vit_paths = []
             for wsi_name in self.wsi_names:
                 for cellvit_path in cellvit_paths:
-                    if wsi_name in os.listdir(cellvit_path):
+                    folder_name = os.path.basename(cellvit_path)
+                    if wsi_name in folder_name:
                         wsi_cell_vit_paths.append(cellvit_path)
                         break
             self.wsi_cellvit_paths = wsi_cell_vit_paths
@@ -333,12 +330,9 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                                         'WholePatch-Texture': 'brown',
                                         'WholePatch-Morph': 'lightblue'}
         
-        if self.save_path is not None:
-            if not os.path.exists(os.path.join(self.save_path, "zernike_cell")):
-                os.makedirs(os.path.join(self.save_path, "zernike_cells"), exist_ok=True)
-            
-            if not os.path.exists(os.path.join(self.save_path, "patch_to_cell")):
-                os.makedirs(os.path.join(self.save_path, "patch_to_cell"), exist_ok=True)
+        if self.save_path:
+            os.makedirs(os.path.join(self.save_path, "zernike_cells"), exist_ok=True)
+            os.makedirs(os.path.join(self.save_path, "patch_to_cell"), exist_ok=True)
                               
 
     def convertjson_from_cellvit_to_scMTOP(self, cellvit_json_filename):
@@ -452,9 +446,9 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         ## Convert the json files
         for wsi_name, wsi_path, wsi_cellvit_path in zip(self.wsi_names, self.list_wsi_filenames, self.wsi_cellvit_paths):
             print(f"Computing scMTOP features for {wsi_name}")
-            cellvit_json_filename = os.path.join(wsi_cellvit_path, wsi_name, 'cell_detection', 'cells.json')
+            cellvit_json_filename = os.path.join(wsi_cellvit_path, 'cell_detection', 'cells.json')
             self.convertjson_from_cellvit_to_scMTOP(cellvit_json_filename)
-            fun3(os.path.join(wsi_cellvit_path, wsi_name, 'cell_detection', 'cells_for_scMTOP.json'), wsi_path, self.save_path)
+            fun3(os.path.join(wsi_cellvit_path, 'cell_detection', 'cells_for_scMTOP.json'), wsi_path, self.save_path)
     
     def map_cells_and_patches(self, wsi_name, wsi_cellvit_path):
         """
@@ -467,7 +461,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
             dict: A dictionary mapping patches to cells.
         """
 
-        path_to_scMTOP_json = os.path.join(wsi_cellvit_path, wsi_name, 'cell_detection', 'cells_for_scMTOP.json')
+        path_to_scMTOP_json = os.path.join(wsi_cellvit_path, 'cell_detection', 'cells_for_scMTOP.json')
         with open(path_to_scMTOP_json, 'r') as f:
             scMTOP_json = json.load(f)
         
@@ -486,7 +480,6 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
             if filename == wsi_name:
                 patches_wsi.append(patch)
         print(f"Number of patches in {wsi_name}: {len(patches_wsi)}")
-        print(list(set(filenames)))
 
         df_nuc = pd.DataFrame.from_dict(nuc, orient='index')
 
@@ -511,30 +504,26 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
 
         return patch_to_cell
     
+    @staticmethod
     def process_patch_features(patch, 
-                                patch_to_cell, 
-                                all_cells, 
-                                self, 
-                                wsi_path,
-                                wsi_name,
-                                wsi_cellvit_path, 
-                                zernike_cells=None):
+                               patch_to_cell, 
+                               cells_in_patch_ids,
+                               alive_cells_in_patch_ids,
+                               cells_features,
+                               wsi_path,
+                               wsi_name,
+                               patch_info,
+                               temporary_folder,
+                               zernike_cells=None):
         emb_df = pd.DataFrame()
 
         print(f"Computing patch features for {patch}...", flush=True)
 
         # Mean and std of the features of the cells in the patch
-        cells_ids = [int(cell_id) for cell_id in patch_to_cell[patch]]
-
-        # Check for dead cells
-        cells_dead = [i for i in cells_ids if i not in all_cells.index]
-        if len(cells_dead) > 0:
-            print(f"Warning: there is {len(cells_dead)} dead cells in patch {patch}. These cells are ignored.", flush=True)
-
-        # Keep only cells not dead
-        cells_ids = [i for i in cells_ids if i in all_cells.index]
-
-        cells_features = all_cells.loc[cells_ids]
+        dead_cells_count = len(cells_in_patch_ids) - len(alive_cells_in_patch_ids)
+        if dead_cells_count > 0:
+            print(f"Warning: there are {dead_cells_count} dead cells in patch {patch}. These cells are ignored.", flush=True)
+        
         numeric_feats = [col for col in cells_features.columns if col not in ['Bbox', 'Centroid', 'CellType']]
         mean_columns = [f"{col}_mean" for col in numeric_feats]
         emb_df.loc[patch, mean_columns] = cells_features[numeric_feats].mean().values
@@ -542,11 +531,11 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         emb_df.loc[patch, std_columns] = cells_features[numeric_feats].std().values
 
         # Number of cells in the patch
-        number_of_cells = len(cells_ids)
+        number_of_cells = len(alive_cells_in_patch_ids)
         emb_df.loc[patch, 'Nuclei-Composition_number_of_cells'] = number_of_cells
 
         # Density of cells in the patch
-        shape_patch = [p for p in self.patches_info if p['name'] == patch][0]['shape_pixel']
+        shape_patch = patch_info['shape_pixel']
         cell_density = number_of_cells / (shape_patch ** 2)
         emb_df.loc[patch, 'Nuclei-Composition_total_cell_density'] = cell_density
 
@@ -561,10 +550,10 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                 emb_df.loc[patch, f"Nuclei-Composition_density_of_{cell_type}_cells"] = 0
 
         # Extracellular matrix
-        non_cell_pixels, patch_mask, patch_img = self.get_extracellular_pixels(wsi_path=wsi_path,
-                                                                            wsi_name=wsi_name,
-                                                                            wsi_cellvit_path=wsi_cellvit_path,
-                                                                            patch_name=patch)
+        non_cell_pixels, patch_mask, patch_img = scMTOP_EngineeredFeatures.get_extracellular_pixels(wsi_path=wsi_path,
+                                                                                                    wsi_name=wsi_name,
+                                                                                                    patch_info=patch_info,
+                                                                                                    temporary_folder=temporary_folder)
         
         patch_pixels = np.array(patch_img)[:, :, :3].reshape(-1, 3)
         whole_patch_color_features = get_color_features(patch_pixels)
@@ -577,7 +566,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
 
         # Extracellular matrix features -- color and texture
         extracellular_color_features = get_color_features(non_cell_pixels)
-        extracellular_texture_features = self.get_extracellular_texture_features(patch_img, patch_mask)
+        extracellular_texture_features = scMTOP_EngineeredFeatures.get_extracellular_texture_features(patch_img, patch_mask)
 
         for feature_name, feature_value in extracellular_color_features.items():
             feature_name = f"ExtraCell-Color_{feature_name}"
@@ -601,19 +590,22 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                 feature_name = f"Nuclei-Morph_{feature_name}"
                 emb_df.loc[patch, feature_name] = feature_value
 
+        gc.collect()
+
         return emb_df
 
     @staticmethod
     def process_patch_features_wrapper(args):
         return scMTOP_EngineeredFeatures.process_patch_features(*args)
 
-    def get_patch_features(self, wsi_path, wsi_name, wsi_cellvit_path, patch_to_cell, zernike_cells=None, num_cores=None):
+    def get_patch_features(self, wsi_path, wsi_name, patch_to_cell, zernike_cells=None, num_cores=None):
         print(f"Computing patch features for {wsi_name}...", flush=True)
+
+        # Load the CellViT features
         T_cells = pd.read_csv(os.path.join(self.save_path, wsi_name, f"{wsi_name}_Feats_T.csv"), index_col=0)
         I_cells = pd.read_csv(os.path.join(self.save_path, wsi_name, f"{wsi_name}_Feats_I.csv"), index_col=0)
         S_cells = pd.read_csv(os.path.join(self.save_path, wsi_name, f"{wsi_name}_Feats_S.csv"), index_col=0)
         N_cells = pd.read_csv(os.path.join(self.save_path, wsi_name, f"{wsi_name}_Feats_N.csv"), index_col=0)
-
         all_cells = pd.concat([T_cells, I_cells, S_cells, N_cells])
 
         # Remove graph features
@@ -622,82 +614,91 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         # Remove stromaBlocker features
         all_cells = all_cells[[col for col in all_cells.columns if 'stromaBlocker' not in col]]
 
+        # Get the patches
         patches = list(patch_to_cell.keys())
-        args = [(patch, patch_to_cell, all_cells, self, wsi_path, wsi_name, wsi_cellvit_path, zernike_cells) for patch in patches]
 
+        # Assign to local variable to avoid keeping self in generator
+        patch_name_to_info = self.patch_name_to_info  
+        temporary_folder = self.temporary_folder
+
+        def generate_args():
+            for patch in patches:
+
+                cells_in_patch_ids = pd.Series([int(cell_id) for cell_id in patch_to_cell[patch]])
+                alive_cells_in_patch_ids = cells_in_patch_ids[cells_in_patch_ids.isin(all_cells.index)]
+                cells_features = all_cells.loc[alive_cells_in_patch_ids]
+                patch_info = patch_name_to_info[patch]
+                
+                yield (
+                    patch,
+                    patch_to_cell,
+                    cells_in_patch_ids,
+                    alive_cells_in_patch_ids,
+                    cells_features,
+                    wsi_path,
+                    wsi_name,
+                    patch_info,
+                    temporary_folder,
+                    zernike_cells,
+                )
+
+        # Compute the features in parallel
         with Pool(processes=num_cores) as pool:
-            results = list(tqdm(pool.imap(scMTOP_EngineeredFeatures.process_patch_features_wrapper, args), total=len(patches)))
+            results = list(tqdm(pool.imap(scMTOP_EngineeredFeatures.process_patch_features_wrapper, generate_args()), total=len(patches)))
 
-        emb_df = pd.concat(results, axis=0)
-
-        #color_cols = [col for col in emb_df if "Color" in col or "Transparency" in col]
-        
-        
+        # Concatenate the results
+        emb_df = pd.concat(results, axis=0)       
         emb_df.rename(columns=lambda x: x.replace("Morph", "Nuclei-Morph") if x.startswith("Morph") else x, inplace=True)
         emb_df.rename(columns=lambda x: x.replace("Texture", "Nuclei-Texture") if x.startswith("Texture") else x, inplace=True)
-        
         color_cols = [col for col in emb_df if "Color" in col or "Transparency" in col]
         emb_df.rename(columns=lambda x: x.replace("Nuclei-Texture", "Nuclei-Color") if x in color_cols else x, inplace=True)
 
         return emb_df
         
     
+    @staticmethod
+    def get_extracellular_pixels(wsi_path, wsi_name, patch_info, temporary_folder):
 
-    def get_extracellular_pixels(self, wsi_path, wsi_cellvit_path, wsi_name, patch_name):
-
-        # Load cellvit data
-        path_to_scMTOP_json = os.path.join(wsi_cellvit_path, wsi_name, 'cell_detection', 'cells_for_scMTOP.json')
-
-        with open(path_to_scMTOP_json, 'r') as f:
-            scMTOP_json = json.load(f)
-
-        # Load wsi
+        # Load the wsi
         wsi = openslide.OpenSlide(wsi_path)
 
         # Load patches info
-
-        patch_info = [patch_info for patch_info in self.patches_info if patch_info['name'] == patch_name][0]
         patch_shape = patch_info['shape_pixel']
         start_width_origin = patch_info['start_width_origin']
         start_height_origin = patch_info['start_height_origin']
 
-        # Get the mask
-        mask = Image.new('L', wsi.level_dimensions[0], 255)
-        draw = ImageDraw.Draw(mask)
-        for cell in scMTOP_json['nuc']:
-
-            draw.polygon([tuple(point) for point in scMTOP_json['nuc'][cell]['contour']], outline=1, fill=1)
-
-        mask = np.array(mask)
-
-        patch_mask = mask[start_height_origin:start_height_origin+patch_shape, start_width_origin:start_width_origin+patch_shape]
-
+        # Get the patch image
         patch_img = wsi.read_region((start_width_origin, start_height_origin), 0, (patch_shape, patch_shape))
+        patch_img = patch_img.convert("RGB")
 
-        non_cell_pixels = np.array(patch_img)[patch_mask == 255]
+        # Compute the mask
+        mask_path = os.path.join(temporary_folder, f"{wsi_name}_extracellular_mask.npy")
+        full_mask = np.load(mask_path, mmap_mode='r')  
+        patch_mask = full_mask[start_height_origin:start_height_origin+patch_shape, start_width_origin:start_width_origin+patch_shape]
+
+        # Get the non-cell pixels
+        non_cell_pixels = np.asarray(patch_img)[patch_mask == 255]
 
         return non_cell_pixels, patch_mask, patch_img
     
-    def get_extracellular_texture_features(self, patch_img, patch_mask):
-        
-        gray_image = (rgb2gray(np.array(patch_img)[:, :, :3]) * 255).astype(np.uint8)
-        gray_image[patch_mask == 1] = gray_image.min()
-        
-        grayco_features = {}
-        angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    @staticmethod
+    def get_extracellular_texture_features(patch_img, patch_mask):
+        # Convert to grayscale and 8-bit format
+        gray_image = (rgb2gray(np.asarray(patch_img)[:, :, :3]) * 255).astype(np.uint8)
 
+        # Apply mask
+        masked_image = np.copy(gray_image)
+        masked_image[patch_mask == 1] = masked_image.min()
+                
         # Compute the gray-level co-occurrence matrix (GLCM)
-        glcm = graycomatrix(gray_image, [1], angles, 256, symmetric=True, normed=True)
+        angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+        glcm = graycomatrix(masked_image, [1], angles, 256, symmetric=True, normed=True)
 
+        # Extract features
         properties = ['ASM', 'contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']
-        grayco_results = {}
+        features = {prop: np.mean(graycoprops(glcm, prop)) for prop in properties}
 
-        for prop in properties:
-            grayco_results[prop] = graycoprops(glcm, prop)[0]
-
-            grayco_features[f'{prop}'] = np.mean(grayco_results[prop])
-
-        return grayco_features        
+        return features        
 
 
 
@@ -723,9 +724,9 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
             print(f"Computing the scMTOP embedding for {wsi_name}")
             print(f"Path to the WSI: {wsi_path}")
             print(f"Path to the CellViT folder: {wsi_cellvit_path}")
-           # if not os.path.exists(os.path.join(self.save_path, wsi_name)):
             patch_to_cell = self.map_cells_and_patches(wsi_name, wsi_cellvit_path)
 
+            # Compute Zernike moments per nuclei
             if zernike_per_nuclei:
                 if len(patch_to_cell) > 0:
                     if os.path.exists(os.path.join(self.save_path, "zernike_cells", f"{wsi_name}_zernike_cells.json")):
@@ -752,18 +753,19 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
                     zernike_cells = None
             else:
                 zernike_cells = None
+        
+            # Compute the mask
+            self.compute_and_save_wsi_mask(wsi_path, wsi_cellvit_path, wsi_name)
 
-            print(f"Length of patch to cell: {len(patch_to_cell)}", flush=True)
+            # Compute the features
             emb_df = self.get_patch_features(wsi_path=wsi_path, 
                                              wsi_name=wsi_name, 
-                                             wsi_cellvit_path=wsi_cellvit_path, 
                                              patch_to_cell=patch_to_cell, 
                                              zernike_cells=zernike_cells,
                                              num_cores=num_cores)
-         
+
+            # Save the features of the current WSI
             emb_dfs.append(emb_df)
-            print(len(emb_dfs), flush=True)
-            print(emb_df.shape, flush=True)
 
             if len(self.wsi_names) == 1 or save_individual_wsi:
                 print("Saving the scMTOP embedding at: ", os.path.join(self.save_path, f"{wsi_name}_scMTOP.csv"))
@@ -771,19 +773,68 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
         
         self.emb_df = pd.concat(emb_dfs)
         
+        # Save the whole embedding
         if save_whole:
             print("Saving the whole scMTOP embedding at: ", os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"))
             self.emb_df.to_csv(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"))
 
+    
+    def compute_and_save_wsi_mask(self, wsi_path, wsi_cellvit_path, wsi_name):
+
+        # Extract the mask from the CellViT json file if it exists
+        mask_path = os.path.join(self.temporary_folder, f"{wsi_name}_extracellular_mask.npy")
+        if os.path.exists(mask_path):
+            print(f"Mask for {wsi_name} already exists at {mask_path}. Skipping computation.", flush=True)
+            return mask_path  
+
+        # Else compute the mask
+        start_time = time.time()
+
+        print(f"Computing the extracellular mask for {wsi_name}...", flush=True)
+        
+        # Load the CellViT json file
+        path_to_scMTOP_json = os.path.join(wsi_cellvit_path, 'cell_detection', 'cells_for_scMTOP.json')
+        with open(path_to_scMTOP_json, 'r') as f:
+            scMTOP_json = json.load(f)
+
+        # Load the WSI
+        wsi = openslide.OpenSlide(wsi_path)
+        wsi_dims = wsi.level_dimensions[0]
+
+        # Create a mask
+        mask = Image.new('L', wsi_dims, 255)
+        draw = ImageDraw.Draw(mask)
+        for cell in tqdm(scMTOP_json['nuc'], desc="Processing cells", unit="cell"):
+            draw.polygon([tuple(point) for point in scMTOP_json['nuc'][cell]['contour']], outline=1, fill=1)
+        mask_np = np.asarray(mask)
+
+        # Save to the defined temp folder
+        os.makedirs(self.temporary_folder, exist_ok=True)
+        mask_path = os.path.join(self.temporary_folder, f"{wsi_name}_extracellular_mask.npy")
+        np.save(mask_path, mask_np)
+
+        print(f"Time taken to compute the mask: {time.time() - start_time}", flush=True)
+        return mask_path
+    
+
+    def delete_mask(self, wsi_name):
+        mask_path = os.path.join(self.temporary_folder, f"{wsi_name}_extracellular_mask.npy")
+        if os.path.exists(mask_path):
+            os.remove(mask_path)
+            print(f"Deleted the mask file at {mask_path}.", flush=True)
+
+    
     def get_extracellular_morphological_features(self, patch_img, patch_mask):
-
+        
+        # Apply the mask
         masked_image = apply_mask(image=patch_img, mask=patch_mask)
+        gray_image = (rgb2gray(np.asarray(masked_image)[:, :, :3]) * 255).astype(np.uint8)
 
-        gray_image = (rgb2gray(np.array(masked_image)[:, :, :3]) * 255).astype(np.uint8)
         # Label the connected regions in the mask
         label_image = label(patch_mask > 0)
         regions = regionprops(label_image, intensity_image=gray_image)
 
+        # Compute the features 
         features = []
 
         for region in regions:
@@ -807,6 +858,7 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
 
         return all_features
 
+    
     def load_emb_df_from_individual_wsi(self, savewhole=True):
         """
         Loads embedding dataframes from individual Whole Slide Images (WSI) and concatenates them into a single dataframe.
@@ -845,29 +897,26 @@ class scMTOP_EngineeredFeatures(EngineeredFeatures):
 
         self.emb_df = pd.read_csv(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"), index_col=0)
 
+    
     def load_emb_df(self):
-        try:
-            if os.path.exists(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv")):
-                print("Loading the whole scMTOP embedding from ", os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"))
-                self.load_emb_df_from_whole()
-            else:
-                try:
-                    self.load_emb_df_from_individual_wsi()
-                except:
-                    warnings.warn("No scMTOP embedding found. Embedding will be empty.")
-                    self.emb_df = None
-        except:
-            self.emb_df = None
-
+        if os.path.exists(os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv")):
+            print("Loading the whole scMTOP embedding from ", os.path.join(self.save_path, f"{self.dataset_name}_scMTOP.csv"))
+            self.load_emb_df_from_whole()
+        else:
+            try:
+                self.load_emb_df_from_individual_wsi()
+            except:
+                warnings.warn("No scMTOP embedding found. Embedding will be empty.")
+                self.emb_df = pd.DataFrame()
 
 
 def compute_features_from_scMTOP(patches_info_filename=None,
                                 path_to_cellvit_folder=None,
                                 list_wsi_filenames=None,
                                 path_to_wsis=None,
-                                result_saving_folder="../results/engineered_features/scMTOP",
-                                dataset_name="dataset",
-                                temporary_folder="../results/tmp", 
+                                result_saving_folder="results/HER2/engineered_features/scMTOP",
+                                dataset_name="HER2",
+                                temporary_folder="results/tmp", 
                                 save_individual_wsi=False,
                                 save_whole=True, 
                                 zernike_per_nuclei=False,
@@ -903,17 +952,15 @@ def compute_features_from_scMTOP(patches_info_filename=None,
                                       num_cores=num_cores)
 
 
-
-
 def compute_engineered_features(method="scMTOP",
                                 patches_info_filename=None,
                                 patches_filename=None,
                                 path_to_cellvit_folder=None,
                                 list_wsi_filenames=None,
                                 path_to_wsis=None,
-                                result_saving_folder="../results/engineered_features/scMTOP",
-                                dataset_name="dataset",
-                                temporary_folder="../results/tmp",
+                                result_saving_folder="results/HER2/engineered_features/scMTOP",
+                                dataset_name="HER2",
+                                temporary_folder="results/tmp",
                                 save_individual_wsi=False,
                                 save_whole=True, 
                                 zernike_per_nuclei=False,
@@ -950,6 +997,8 @@ def compute_engineered_features(method="scMTOP",
     else:
         raise ValueError("Method not supported.")
 
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Compute engineered features for digital histopathology.")
@@ -959,15 +1008,14 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_cellvit_folder", type=str, help="Path to the CellViT folder.")
     parser.add_argument("--list_wsi_filenames", type=str, nargs='+', help="List of WSI filenames.")
     parser.add_argument("--path_to_wsis", type=str, help="Path to the WSIs.")
-    parser.add_argument("--result_saving_folder", type=str, default="../results/engineered_features/scMTOP", help="Output path for the results.")
-    parser.add_argument("--dataset_name", type=str, default="dataset", help="Name of the dataset.")
-    parser.add_argument("--temporary_folder", type=str, default="../results/tmp", help="Temporary folder for intermediate files.")
+    parser.add_argument("--result_saving_folder", type=str, default="results/HER2/engineered_features/scMTOP", help="Output path for the results.")
+    parser.add_argument("--dataset_name", type=str, default="HER2", help="Name of the dataset.")
+    parser.add_argument("--temporary_folder", type=str, default="results/tmp", help="Temporary folder for intermediate files.")
     parser.add_argument("--save_individual_wsi", action="store_true", help="Save the scMTOP embeddings for each WSI.")
     parser.add_argument("--save_whole", action="store_true", help="Save the whole scMTOP embeddings.")
     parser.add_argument("--zernike_per_nuclei", action="store_true", help="Compute Zernike moments per nuclei.")
     parser.add_argument("--num_cores", type=int, default=None, help="Number of cores to use for parallel processing.")
     args = parser.parse_args()
-
 
     compute_engineered_features(
         method=args.method,

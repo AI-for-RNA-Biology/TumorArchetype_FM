@@ -52,7 +52,7 @@ optim:
 train:
   batch_size: 25
   data_path: results/Ovarian/compute_patches/invasive
-  output_dir: pretrained_models/extended_uni/Ovarian/Ovarian_uni_explora_koleo_65536_prototypes
+  output_dir: pretrained_models/Ovarian/Ovarian_uni_explora_koleo_65536_prototypes
   embed_dim: 1024
   seed: 0
   num_workers: 4

@@ -12,7 +12,8 @@ import anndata
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.engineered_features.engineered_features import EngineeredFeatures, scMTOP_EngineeredFeatures
 from digitalhistopathology.embeddings.embedding import Embedding
-from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset, VisiumHDdataset
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
+# from digitalhistopathology.datasets.real_datasets import VisiumHDdataset (preliminary analysis for Ovarian)
 import glob
 
 class BenchmarkBase:

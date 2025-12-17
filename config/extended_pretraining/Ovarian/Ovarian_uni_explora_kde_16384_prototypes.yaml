@@ -53,7 +53,7 @@ train:
   batch_size: 25
   split: 0.95
   data_path: results/Ovarian/compute_patches/invasive
-  output_dir: pretrained_models/extended_uni/Ovarian/Ovarian_uni_explora_kde_16384_prototypes
+  output_dir: pretrained_models/Ovarian/Ovarian_uni_explora_kde_16384_prototypes
   seed: 0
   num_workers: 4
   cache_dataset: true

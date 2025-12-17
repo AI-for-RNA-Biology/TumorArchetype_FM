@@ -14,7 +14,6 @@ import numpy as np
 import seaborn as sns
 from PIL import Image
 from json import load
-from digitalhistopathology.datasets.spaceranger_utils import *
 from natsort import natsorted
 import openslide
 import gzip
@@ -34,6 +33,9 @@ import rpy2.robjects as ro
 import rpy2.robjects.vectors as rvec
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.packages import importr
+
+# Import for Ovarian (preliminary analysis)
+# from digitalhistopathology.datasets.spaceranger_utils import *
 
 pandas2ri.activate()
 EBImage = importr('EBImage')
@@ -115,10 +117,15 @@ class HER2Dataset(SpatialDataset):
         Returns:
             gene_embedding.GeneEmebdding: gene embedding
         """
-        # Filter only spot patches
-        patches_filenames = [
-            f for f in self.patches_filenames if "spot" in f.split("/")[-1]
-        ]
+
+        if len(self.patches_filenames) > 1:
+            # Filter only spot patches
+            patches_filenames = [
+                f for f in self.patches_filenames if "spot" in f.split("/")[-1]
+            ]
+        else:
+            patches_filenames = self.patches_filenames
+
         ge = GeneEmbedding(
             spot_diameter_fullres=self.spot_diameter,
             samples_names=self.samples_names,
@@ -442,7 +449,20 @@ class TNBCDataset(SpatialDataset):
         
         # Generate all RDS file paths
         all_dataframes = []
+        all_summarized_annots = []
+        n_nothing = 0
+        n_sure_labels = 0
+        ids_to_remove = {}
+        ids_unclear = {}
         annotsBySpot = natsorted(glob.glob(f"{dataDir}/Robjects/annotsBySpot/TNBC*.RDS"))
+
+        mapping = {
+            "invasive cancer": ["Tumor", "Tumor region"],
+            "cancer in situ": ["in situ"],
+            "immune infiltrate": ["High TIL stroma", "Lymphocyte", "Lymphoid nodule"],
+            "connective tissue": ["Nerve", "Acellular stroma", "Stroma cell", "Low TIL stroma", "Vessels"],
+            "breast glands": ["Lactiferous duct"],
+            "adipose tissue": ["Fat tissue"]}
 
         if not annotated_only:
             annotated_names = natsorted([os.path.basename(f).replace('.png', '') for f in glob.glob(f"{dataDir}/Images/imageAnnotations/TNBC*.png")])
@@ -467,16 +487,52 @@ class TNBCDataset(SpatialDataset):
                             if name == 'annots':
                                 annots_rds = loaded_data[i]
                         annots_df = convert_to_df(annots_rds)
-                        # annots_df[
-                        #     'source_file'] = os.path.basename(annots).replace('.RDS', '')
                         
                         merged_dfs = pd.merge(annots_df, spots_df, left_index=True, right_index=True, suffixes=('_spot', '_annot'), how='outer')
                         merged_dfs['source_file'] = img_name.replace('.jpg', '')
-
-                        # Add a column to track the source file
                         
                         # Append to the list of DataFrames
                         all_dataframes.append(merged_dfs)
+
+                        # Create the labels
+                        annots_df['source_file'] = os.path.basename(annots).replace('.RDS', '')
+                        a = annots_df.drop(['source_file'], axis=1)
+                        
+                        a['prop_nothing'] = (a['Nothing'] + a['Artefacts'] + a['Hole (whitespace)'])/a.sum(axis=1)
+                        n_nothing += len(a[a['prop_nothing'] >= 0.5])
+                        
+                        ids_to_remove[os.path.basename(annots).replace('.RDS', '')] = a[a['prop_nothing'] >= 0.5].index.tolist()
+
+                        a = a[a['prop_nothing'] < 0.5]
+                        a.drop(['prop_nothing', 'Nothing', 'Artefacts', 'Hole (whitespace)'], axis=1, inplace=True)
+                        
+                        for big_c, small_c in mapping.items():
+                            a[big_c] = a[small_c].sum(axis=1)
+                            a.drop(columns=small_c, inplace=True)
+
+                        a = a.apply(lambda x: x / x.sum(), axis=1)
+                                
+                        # Identify rows where no value is above 0.75
+                        undetermined_mask = ~(a.apply(lambda row: (row > 0.75).any(), axis=1))
+                        final_a = a.copy()
+
+                        # Assign label 'undetermined' to those rows
+                        final_a.loc[undetermined_mask, 'label'] = 'undetermined'
+
+                        # For the rest, assign the label as before
+                        final_a.loc[~undetermined_mask, 'label'] = a[~undetermined_mask].idxmax(axis=1)
+
+                        n_sure_labels += (~undetermined_mask).sum()
+                        
+                        source_file = os.path.basename(annots).replace('.RDS', '')
+                        final_a = spots_df[spots_df['selected'] == 1].merge(final_a, left_index=True, right_index=True, how='outer')
+                        file_name = [filename.split('.jpg')[0] for filename in images_name_list if source_file in filename][0]
+                        final_a.replace(np.nan, 'undetermined', inplace=True)
+                        final_a['source_file'] = source_file
+
+                        final_a.replace("Necrosis", "undetermined", inplace=True)
+                        final_a.replace("Heterologous elements", "undetermined", inplace=True)
+                        all_summarized_annots.append(final_a.copy())
 
                     except Exception as e:
                         print(f"Error processing {spots}: {e}")# Combine all DataFrames into one giant DataFrame
@@ -504,6 +560,46 @@ class TNBCDataset(SpatialDataset):
                     # Append to the list of DataFrames
                     all_dataframes.append(merged_dfs)
 
+                    # Create the labels
+                    annots_df['source_file'] = os.path.basename(annots).replace('.RDS', '')
+                    a = annots_df.drop(['source_file'], axis=1)
+                    
+                    a['prop_nothing'] = (a['Nothing'] + a['Artefacts'] + a['Hole (whitespace)'])/a.sum(axis=1)
+                    n_nothing += len(a[a['prop_nothing'] >= 0.5])
+                    
+                    ids_to_remove[os.path.basename(annots).replace('.RDS', '')] = a[a['prop_nothing'] >= 0.5].index.tolist()
+
+                    a = a[a['prop_nothing'] < 0.5]
+                    a.drop(['prop_nothing', 'Nothing', 'Artefacts', 'Hole (whitespace)'], axis=1, inplace=True)
+                    
+                    for big_c, small_c in mapping.items():
+                        a[big_c] = a[small_c].sum(axis=1)
+                        a.drop(columns=small_c, inplace=True)
+
+                    a = a.apply(lambda x: x / x.sum(), axis=1)
+                            
+                    # Identify rows where no value is above 0.75
+                    undetermined_mask = ~(a.apply(lambda row: (row > 0.75).any(), axis=1))
+                    final_a = a.copy()
+
+                    # Assign label 'undetermined' to those rows
+                    final_a.loc[undetermined_mask, 'label'] = 'undetermined'
+
+                    # For the rest, assign the label as before
+                    final_a.loc[~undetermined_mask, 'label'] = a[~undetermined_mask].idxmax(axis=1)
+
+                    n_sure_labels += (~undetermined_mask).sum()
+                    
+                    source_file = os.path.basename(annots).replace('.RDS', '')
+                    final_a = spots_df[spots_df['selected'] == 1].merge(final_a, left_index=True, right_index=True, how='outer')
+                    file_name = [filename.split('.jpg')[0] for filename in images_name_list if source_file in filename][0]
+                    final_a.replace(np.nan, 'undetermined', inplace=True)
+                    final_a['source_file'] = source_file
+
+                    final_a.replace("Necrosis", "undetermined", inplace=True)
+                    final_a.replace("Heterologous elements", "undetermined", inplace=True)
+                    all_summarized_annots.append(final_a.copy())
+
                 except Exception as e:
                     print(f"Error processing {spots}: {e}")
         
@@ -511,8 +607,20 @@ class TNBCDataset(SpatialDataset):
         self.spot_diameter = spot_diameter
         self.images_filenames = images_filenames_spot_patches
         self.all_dataframes = all_dataframes
-        
 
+        # Save label processing results
+        all_labels = pd.concat(all_summarized_annots)
+        all_labels.reset_index(inplace=True)
+        all_labels.replace("Necrosis", "undetermined", inplace=True)
+        all_labels.replace("Heterologous elements", "undetermined", inplace=True)
+        
+        # Drop columns if they exist
+        all_labels.drop(["Heterologous elements", "Necrosis"], axis=1, inplace=True)
+        all_labels.index = all_labels.apply(lambda x: str(x['source_file']) + '_spot' + str(x['index']), axis=1)
+        all_labels.drop(columns=['index', 'source_file'], inplace=True)
+        os.makedirs("results/TNBC/compute_patches/all", exist_ok=True)
+        all_labels.to_csv("results/TNBC/compute_patches/all/spots_labels.csv")
+        self.label_filenames = all_labels
 
     def get_gene_embeddings(
         self,
@@ -658,8 +766,10 @@ class TNBCDataset(SpatialDataset):
         return palette_2
     
 
-class VisiumHDdataset(SpatialDataset):
+'''
+Preliminary analysis of Ovarian data
 
+class VisiumHDdataset(SpatialDataset):
 
     PALETTE = {
         "invasive cancer": "red",
@@ -850,6 +960,4 @@ class VisiumHDdataset(SpatialDataset):
         )
             
         return ge
-
-        
-
+'''

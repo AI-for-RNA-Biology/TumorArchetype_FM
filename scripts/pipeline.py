@@ -26,7 +26,8 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 
 from digitalhistopathology.clustering.clustering_utils import clustering_boxplot_per_patient
-from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset, VisiumHDdataset
+from digitalhistopathology.datasets.real_datasets import HER2Dataset, TNBCDataset
+# from digitalhistopathology.datasets.real_datasets import VisiumHDdataset (preliminary analysis for Ovarian)
 from digitalhistopathology.datasets.spatial_dataset import MixedImageDataset, SpatialDataset
 from digitalhistopathology.embeddings.image_embedding import ImageEmbedding
 from digitalhistopathology.helpers import NumpyEncoder

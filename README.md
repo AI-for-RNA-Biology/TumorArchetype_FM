@@ -3,7 +3,7 @@
 ## Overview
 Here, we develop a pipeline to systematically evaluate the biological concepts encoded within histopathology foundation models (hFMs) using molecular data. We also perform extended-pretraining of [UNI](https://github.com/mahmoodlab/UNI) to identify optimal conditions that enhance the model’s ability to encode richer, tumor tissue-specific biological concepts.
 
-This code was developed on a 64-bit Debian GNU/Linux system (x86_64), running kernel version 6.1.0-26-amd64 (Debian 6.1.112-1), with dynamic preemption enabled (PREEMPT_DYNAMIC). The code to perform extended pretraining is available in the [dinov2](./dinov2/) folder, while the code to assess compute and evaluate the resulting embeddings is located in the [digitalhistopathology](./digitalhistopathology/) and [scripts](./scripts/) folders.
+This code was developed on a 64-bit Debian GNU/Linux system (x86_64), running kernel version 6.1.0-26-amd64 (Debian 6.1.112-1), with dynamic preemption enabled (PREEMPT_DYNAMIC). The code to perform extended pretraining is available in the [dinov2](https://github.com/AI-for-RNA-Biology/dinov2/tree/19a441962b97527abc3a8ca2da8a2938aa7c663e) folder, while the code to assess compute and evaluate the resulting embeddings is located in the [digitalhistopathology](./digitalhistopathology/) and [scripts](./scripts/) folders.
 
 ## 1. Installation
 
@@ -152,7 +152,7 @@ In more details here are the steps:
 
 Example usage to extract embeddings from UNI using HER2 dataset:
 ```bash
-python scripts/pipeline.py --model_name uni --patches_folder results/HER2/compute_patches/all/ --pipeline_name uni --results_folder results/HER2 --dataset HER2
+python scripts/pipeline.py --model_name uni --patches_folder results/HER2/compute_patches/all/ --pipeline_name uni --results_folder results --dataset HER2
 ```
 
 Note: If you just want to extract embeddings without computing the shannon entropy or running the k-NN re-annotation, you can use the ready-to-use script `scripts/compute_embeddings.py` that takes the same arguments. 
@@ -209,7 +209,7 @@ The config files to extract embeddings from all T-UNI models are available under
 
 ### 5.5 Handcrafted features extraction
 
-In this step, segmentation of the nuclei has been performed using CellViT [[9](#ref)]. Features related to the morphology and texture of the nuclei have been extracted using scMTOP57 and correspond to the “Nuclei-Morph”, and “Nuclei-Texture” features respectively. We have enhanced the “Nuclei-Morph” category by computing Zernike moments of each cell using the Mahotas python package58. We have adapted scMTOP to add color descriptors of the nuclei, referred to as “Nuclei-Color” features, namely mean, skewness, kurtosis and entropy of each RGB color channel, as well as intensity and transparency. Finally, statistics on the cell type composition have been computed based on cell labels outputted by CellViT, and are referred to as “Nuclei-Composition”. Features related to the extracellular matrix color (“ExtraCell-Color” features) and texture (“ExtraCell-Texture”) have been computed using scikit-image59. Similarly, texture and color features at the entire patch level have been extracted and are referred to as “WholePatch-Texture” and “WholePatch-Color”.
+In this step, segmentation of the nuclei has been performed using CellViT [[9](#ref)]. Features related to the morphology and texture of the nuclei have been extracted using scMTOP and correspond to the “Nuclei-Morph”, and “Nuclei-Texture” features respectively. We have enhanced the “Nuclei-Morph” category by computing Zernike moments of each cell using the Mahotas python package. We have adapted scMTOP to add color descriptors of the nuclei, referred to as “Nuclei-Color” features, namely mean, skewness, kurtosis and entropy of each RGB color channel, as well as intensity and transparency. Finally, statistics on the cell type composition have been computed based on cell labels outputted by CellViT, and are referred to as “Nuclei-Composition”. Features related to the extracellular matrix color (“ExtraCell-Color” features) and texture (“ExtraCell-Texture”) have been computed using scikit-image. Similarly, texture and color features at the entire patch level have been extracted and are referred to as “WholePatch-Texture” and “WholePatch-Color”.
 
 **5.5.1 Nuclei segmentation using CellViT**:
 
@@ -221,7 +221,10 @@ conda env create -f cellvit_env.yml
 conda activate cellvit_env
 ```
 
-Then run the segmentation using the script `digitalhistopathology/engineered_features/cell_segmentor.py`, with the following arguments: 
+Then, download the [CellViT checkpoint] (https://drive.google.com/uc?export=download&id=1wP4WhHLNwyJv97AK42pWK8kPoWlrqi30) and place it in the `CellViT/models/pretrained/` folder. This model works with slide magnifications 20x (used for both HER2 and TNBC), model for 40x is also available [here](https://drive.google.com/uc?export=download&id=1MvRKNzDW2eHbQb5rAgTEp6s2zAXHixRV).
+
+
+Finally, run the segmentation using the script `digitalhistopathology/engineered_features/cell_segmentor.py`, with the following arguments: 
 - `--segmentation_mode`: Segmentation mode to use. For CellViT, set this to "cellvit".
 - `--magnification`: Magnification level of the images (e.g., 20x).
 - `--mpp`: Microns per pixel for the images.
@@ -229,9 +232,9 @@ Then run the segmentation using the script `digitalhistopathology/engineered_fea
 - `--list_wsi_filenames`: List of whole slide image filenames to process.
 - `--dataset_name`: Name of the dataset being processed.
 - `--model_path`: Path to the pretrained CellViT model weights.
-- `--results_saving_folder`: Directory where the segmentation results will be saved.
+- `--result_saving_folder`: Directory where the segmentation results will be saved.
 
-__Note: If `--patches_info_filename` is provided, the `--list_wsi_filenames` argument will be ignored. Use `--list_wsi_filenames` when you need to process specific individual files.__
+_Note: If `--patches_info_filename` is provided, the `--list_wsi_filenames` argument will be ignored. Use `--list_wsi_filenames` when you need to process specific individual files._
 
 Example usage for HER2 dataset:
 ```bash
@@ -241,11 +244,11 @@ PYTHONPATH=$(pwd)/CellViT python3 digitalhistopathology/engineered_features/cell
 --mpp 1 \
 --patches_info_filename "results/HER2/compute_patches/all/patches_info.pkl.gz" \
 --dataset_name "HER2" \
---model_path "../../CellViT/models/pretrained/" \
---results_saving_folder "results/"
+--model_path "CellViT/models/pretrained/" \
+--result_saving_folder "results/HER2/"
 ```
 
-The results will be saved in `results/{dataset}/segmentation/`. This step took around 30 minutes on a h100 GPU with 12 cpus per task and 64GB of memory for the HER2 dataset.
+The results will be saved in `results/{dataset}/segmentation/`. This step took around 30 minutes for HER2 dataset on a h100 GPU with 12 cpus per task and 64GB of memory.
 
 **5.5.2 Handcrafted features computation**: 
 
@@ -262,7 +265,7 @@ Here are the parameters for the `digitalhistopathology/engineered_features/engin
 - `--zernike_per_nuclei`: Flag to compute Zernike moments for each nucleus.
 - `--num_cores`: Number of CPU cores to use for parallel processing.
 
-__Note: If `--patches_info_filename` is provided, the `--list_wsi_filenames` argument will be ignored. Use `--list_wsi_filenames` when you need to process specific individual files.__
+_Note: If `--patches_info_filename` is provided, the `--list_wsi_filenames` argument will be ignored. Use `--list_wsi_filenames` when you need to process specific individual files._
 
 Example for HER2 dataset without Zernike moments:
 ```bash
@@ -280,37 +283,94 @@ The results will be saved in `results/{dataset}/engineered_features/scMTOP`. Thi
 
 ### 5.6 Molecular data preparation
 
-**5.6.1 Load molecular data**:
-To load the molecular data properly, run the script:
+This section describes how to preprocess, load, and analyze molecular data for the HER2 and TNBC datasets. The scripts are available in the [scripts/HER2](scripts/HER2) and [scripts/TNBC](scripts/TNBC) folders.
 
+
+**5.6.0 Preprocessing (TNBC only)**
+
+This step converts raw RDS count objects into a filtered, patient-aware Seurat object. Skip this section for HER2, which is already preprocessed.
+
+1. Install the required dependency, and set the library path:
+    ```bash
+    pip install gtfparse=2.5.0
+    export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+    ```
+
+2. Download the [GENCODE v38 GTF file](https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_38/gencode.v38.annotation.gtf.gz), extract it and place it in `annotation/gencode.v38.annotation.gtf`.
+
+3. Run the script `scripts/TNBC/0_1_process_rds_memory_efficient.py` to process the RDS files into a concatenated count matrix:
+    ```bash
+    python scripts/TNBC/0_1_process_rds_memory_efficient.py \
+    --rds-dir "data/TNBC/Robjects/countsNonCorrected" \
+    --gtf-path "annotation/gencode.v38.annotation.gtf" \
+    --output-dir "results/TNBC/molecular/" \
+    --batch-size 10 \
+    --output-name "TNBC_all_samples_coding_genes" \
+    --save-csv \
+    --keep-intermediates
+    ```
+
+    This step loads RDS count objects sample-by-sample, keeps protein-coding genes only and writes intermediate parquet batches.
+
+
+4. Run the script `scripts/TNBC/0_2_process_tnbc_seurat.R` to process patient-wise filtering and create Seurat object:
+    ```bash
+    Rscript scripts/TNBC/0_2_process_tnbc_seurat.R \
+        "parquet_batch" \
+        "" \
+        "results/TNBC/molecular/intermediate" \
+        "results/TNBC/molecular/filtering" \
+        0.10 \
+        FALSE \
+        results/compute_patches/TNBC/spots_labels.csv
+    ```
+
+    This step applies patient-wise bimodal filtering, selects genes present in ≥ X% (default: 10% of all genes) of patients, and creates a filtered Seurat object.
+
+
+**5.6.1 Load molecular data (HER2 and TNBC)**
+To load the molecular data properly, run the dataset-specific script `scripts/{dataset}/1_load_molecular.py`. 
+
+Example usage for HER2 dataset:
 ```bash
-python script/load_molecular_data.py --gene_embedding_saving_path ../results/molecular --patches_folder ../results/compute_patches/her2_final_without_A
+python scripts/HER2/1_load_molecular_data.py \
+--gene_embedding_saving_path results/HER2/molecular \
+--patches_folder results/HER2/compute_patches/all
 ```
 
 This step is really fast (a few minutes) and can be run on a single cpu wih 16GB.
 
-**5.6.2 Combat-correction**
 
-In order to perform combat correction you need to run:
+**5.6.2 Tissue-level differential gene expression (DGE)**
+This step identifies biological pathways associated with each tissue type by performing differential gene expression (DGE) analysis on the spatial transcriptomics data.
 
-```bash
-R scripts/combat_correction.R
+Example usage for HER2 dataset and UNI model:
+```bash 
+Rscript scripts/HER2/2_tissue_DGE.R uni
 ```
 
-This step is quite fast. It runs in 10minutes on a single cpu.
-
-Note: The needeed R libraries are already installed in the conda environment installed at the beginning.
-
-**5.6.2 Data formatting and UMAP computation of molecular embedding**:
-
-In order to format the molecular embeddings and compute the UMAPs, run:
-
+Example usage for TNBC dataset:
 ```bash
-python scripts/molecular_formatting_and_UMAPs.py
+Rscript scripts/TNBC/2_tissue_DGE.R \
+    "results/TNBC/molecular/filtering/TNBC_filtered_seurat_object.rds" \
+    "results/TNBC/molecular/" \
+    TRUE
 ```
+The parameter `TRUE` indicates that the genes are upregulated, while `FALSE` indicates that the genes are downregulated.
 
-This will create the `.h5ad`embeddings for the raw molecular data, the filtered molecular data, the filtered normalized molecular data and finally, the combat-corrected molecular data. 
-This step is quite fast but requires a lot of memory. It runs in 10 minutes on a single cpu with 100GB of memory.
+
+**5.6.3 DGE between invasive clusters**
+
+This step performs differential analysis between invasive cancer clusters inferred by trained models.
+
+Example usage for HER2 dataset and UNI model:
+```bash
+Rscript scripts/HER2/3_DGE_between_invasive_clusters.R uni
+```
+Same command structure for TNBC dataset.
+
+This step loads invasive cancer cluster assignments, computes molecular profiles for each cluster, and performs pathway enrichment analysis.
+
 
 ### 5.7. **Run the benchmarks**:
 
@@ -427,7 +487,6 @@ The notebooks analyze the results obtained in the full pipeline by doing some ad
 - `12_gene_expression_viz.ipynb`: Visualizes gene expression patterns across clusters on the WSIs. 
 - `13_Supp.ipynb`: Contains supplementary analysis showing why patient A has been removed from all the analysis. 
 
-
 ## Authors
 
 - Lisa Fournier
@@ -438,33 +497,49 @@ The notebooks analyze the results obtained in the full pipeline by doing some ad
 ## References
 
 <a name="ref1"></a>
-[1] Andersson, Alma, Ludvig Larsson, Linnea Stenbeck, Fredrik Salmén, Anna Ehinger, Sunny Z. Wu, Ghamdan Al-Eryani, et al. 2021. “Spatial Deconvolution of HER2-Positive Breast Cancer Delineates Tumor-Associated Cell Type Interactions.” Nature Communications 12 (1): 6012.
+[1] Andersson, A., Larsson, L., Stenbeck, L., Salmén, F., Ehinger, A., Wu, S. Z., Al-Eryani, G., et al. (2021).
+“Spatial Deconvolution of HER2-Positive Breast Cancer Delineates Tumor-Associated Cell Type Interactions.”
+Nature Communications, 12(1), 6012.
 
 <a name="ref2"></a>
-[2] Thrane, Kim, Hanna Eriksson, Jonas Maaskola, Johan Hansson, and Joakim Lundeberg. 2018. “Spatially Resolved Transcriptomics Enables Dissection of Genetic Heterogeneity in Stage III Cutaneous Malignant Melanoma.” Cancer Research 78 (20): 5970–79.
+[2] Thrane, K., Eriksson, H., Maaskola, J., Hansson, J., & Lundeberg, J. (2018).
+“Spatially Resolved Transcriptomics Enables Dissection of Genetic Heterogeneity in Stage III Cutaneous Malignant Melanoma.”
+Cancer Research, 78(20), 5970–5979.
 
 <a name="ref3"></a>
-[3] Ciga, Ozan, Tony Xu, and Anne Louise Martel. 2022. “Self Supervised Contrastive Learning for Digital Histopathology.” Machine Learning with Applications 7 (March): 100198.
+[3] Ciga, O., Xu, T., & Martel, A. L. (2022).
+“Self Supervised Contrastive Learning for Digital Histopathology.” 
+Machine Learning with Applications, 7, 100198.
 
 <a name="ref4"></a>
-[4] Wang, Xiyue, Sen Yang, Jun Zhang, Minghui Wang, Jing Zhang, Wei Yang, Junzhou Huang, and Xiao Han. 2022. “Transformer-Based Unsupervised Contrastive Learning for Histopathological Image Classification.” Medical Image Analysis 81 (October): 102559.
+[4] Wang, X., Yang, S., Zhang, J., Wang, M., Zhang, J., Yang, W., Huang, J., & Han, X. (2022). 
+“Transformer-Based Unsupervised Contrastive Learning for Histopathological Image Classification.”
+Medical Image Analysis, 81, 102559.
 
 <a name="ref5"></a>
-[5] Chen, Richard J., Tong Ding, Ming Y. Lu, Drew F. K. Williamson, Guillaume Jaume, Andrew H. Song, Bowen Chen, et al. 2024. “Towards a General-Purpose Foundation Model for Computational Pathology.” Nature Medicine 30 (3): 850–62.
+[5] Chen, R. J., Ding, T., Lu, M. Y., Williamson, D. F. K., Jaume, G., Song, A. H., Chen, B., et al. (2024).
+“Towards a General-Purpose Foundation Model for Computational Pathology.”
+Nature Medicine, 30(3), 850–862.
 
 <a name="ref6"></a>
-[6] Xu, Hanwen, Naoto Usuyama, Jaspreet Bagga, Sheng Zhang, Rajesh Rao, Tristan Naumann, Cliff Wong, et al. 2024. “A Whole-Slide Foundation Model for Digital Pathology from Real-World Data.” Nature, May. https://doi.org/10.1038/s41586-024-07441-w.
+[6] Xu, H., Usuyama, N., Bagga, J., Zhang, S., Rao, R., Naumann, T., Wong, C., et al. (2024).
+“A Whole-Slide Foundation Model for Digital Pathology from Real-World Data.”
+Nature. https://doi.org/10.1038/s41586-024-07441-w
 
 <a name="ref7"></a>
-[7] Zimmermann, E., et al. “Virchow2: Scaling self-supervised mixed magnification models in pathology,” arXiv [cs.CV], 01-Aug-2024.
+[7] Zimmermann, E., et al. (2024).
+“Virchow2: Scaling self-supervised mixed magnification models in pathology,”
+arXiv preprint arXiv:2408.XXXXX.
 
 <a name="ref8"></a>
-[8] MahmoodLab. “UNI2-h.” GitHub. https://github.com/mahmoodlab/UNI.
+[8] MahmoodLab. “UNI2-h.” GitHub repository. https://github.com/mahmoodlab/UNI
 
 <a name="ref9"></a>
-[9] Hörst, F., et al. “CellViT: Vision Transformers for precise cell segmentation and classification,” Med. Image Anal., vol. 94, p. 103143, May 2024.
+[9] Hörst, F., et al. (2024).
+“CellViT: Vision Transformers for precise cell segmentation and classification.”
+Medical Image Analysis, 94, 103143.
 
 <a name="ref10"></a>
-[10] Wang, X., et al. 2024. "Spatial transcriptomics reveals substantial heterogeneity in triple-negative breast cancer with potential clinical implications." Nat Commun 15: 10232.
-
-
+[10] Wang, X., et al. (2024).
+“Spatial transcriptomics reveals substantial heterogeneity in triple-negative breast cancer with potential clinical implications.” 
+Nature Communications, 15, 10232.

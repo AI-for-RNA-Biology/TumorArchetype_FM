@@ -26,7 +26,7 @@ def get_whole_image_texture_features(patch_img):
     grayco_features = {}
     angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
 
-    gray_image = (rgb2gray(np.array(patch_img)[:, :, :3]) * 255).astype(np.uint8)
+    gray_image = (rgb2gray(np.asarray(patch_img)[:, :, :3]) * 255).astype(np.uint8)
     # Compute the gray-level co-occurrence matrix (GLCM)
     glcm = graycomatrix(gray_image, [1], angles, 256, symmetric=True, normed=True)
 
@@ -53,7 +53,7 @@ def process_zernike_one_cell(args):
     cell, scMTOP_json, mask = args
     y1, x1 = scMTOP_json['nuc'][cell]['bbox'][0]
     y2, x2 = scMTOP_json['nuc'][cell]['bbox'][1]
-    roi = np.array(mask)[y1:y2, x1:x2]
+    roi = np.asarray(mask)[y1:y2, x1:x2]
     zernike_moments = mahotas.features.zernike_moments(roi, radius=10, degree=5)
     return cell, zernike_moments
 
@@ -62,7 +62,7 @@ def get_zernike_moments_per_nuclei(wsi_path, wsi_cellvit_path, wsi_name, num_cor
 
 
     # Load cellvit data
-    path_to_scMTOP_json = os.path.join(wsi_cellvit_path, wsi_name, 'cell_detection', 'cells_for_scMTOP.json')
+    path_to_scMTOP_json = os.path.join(wsi_cellvit_path, 'cell_detection', 'cells_for_scMTOP.json')
 
     with open(path_to_scMTOP_json, 'r') as f:
         scMTOP_json = json.load(f)
@@ -90,6 +90,7 @@ def get_zernike_moments_per_nuclei(wsi_path, wsi_cellvit_path, wsi_name, num_cor
     
     return zernike_cells
 
+
 def get_patch_zernike_moments(patch_name, patch_to_cell, zernike_cells):
 
     patch_zernike_moments = {}
@@ -106,6 +107,7 @@ def get_patch_zernike_moments(patch_name, patch_to_cell, zernike_cells):
         zernike_features[f'zernike_moment_{i+1}_std'] = df_zernike.iloc[i].std()
 
     return zernike_features
+
 
 def get_color_features(pixels_array):
     

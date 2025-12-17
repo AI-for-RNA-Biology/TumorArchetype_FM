@@ -23,3 +23,4 @@ grid_scripts/
 config_local/*
 grid_scripts_slurm/*
 notebooks/10_Molecular_DGE_between_clusters_files/*
+annotation/*

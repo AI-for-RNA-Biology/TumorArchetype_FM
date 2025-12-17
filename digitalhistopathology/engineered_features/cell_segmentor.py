@@ -14,16 +14,12 @@ import sys
 import subprocess
 import glob
 from openslide import OpenSlide
-sys.path.append("../")
-sys.path.append("../CellViT")
+sys.path.append(os.getcwd()) 
 
 from pathlib import Path
 import matplotlib.pyplot as plt
 import torch
 from multiprocessing import Manager
-
-print("No problem with the imports")
-
 
 
 class CellSegmentor:
@@ -31,43 +27,49 @@ class CellSegmentor:
                  path_to_wsis=None,
                  list_wsi_filenames=None,
                  patches_info_filename=None,
-                 results_saving_folder="../results",
-                 temporary_folder="../results/tmp",
-                 dataset_name="dataset",
+                 result_saving_folder="results",
+                 temporary_folder="results/tmp",
+                 dataset_name="HER2",
                  mpp=None,
                  magnification=None,
+                 process_by_patch=False,
                  ):
 
         self.path_to_wsis = path_to_wsis
         self.patches_info = None
 
-        if patches_info_filename is not None:
-            with gzip.open(patches_info_filename) as file:
-                self.patches_info = pickle.load(file)
-            self.list_wsi_filenames = list(set([patch['path_origin'] for patch in self.patches_info]))
-        elif path_to_wsis is not None:
-            self.list_wsi_filenames = glob.glob(os.path.join(path_to_wsis, '*'))
-            self.list_wsi_filenames = [path_to_wsi for path_to_wsi in self.list_wsi_filenames if os.path.isfile(path_to_wsi)]
-        elif list_wsi_filenames is not None:
-            self.list_wsi_filenames = list_wsi_filenames
+        if process_by_patch:
+            if patches_info_filename is not None:
+                with gzip.open(patches_info_filename) as file:
+                    self.patches_info = pickle.load(file)
+                    self.list_wsi_filenames = list(set([patch['path'] for patch in self.patches_info]))
+            else:
+                raise ValueError("patches_info_filename cannot be None if process_by_patch is True")
 
         else:
-            raise ValueError("path_to_wsis, list_wsi_filenames and patches_info_filename cannot be all None")
-
-        self.results_saving_folder = results_saving_folder
+            if list_wsi_filenames is not None: 
+                self.list_wsi_filenames = list_wsi_filenames 
+            elif patches_info_filename is not None: 
+                with gzip.open(patches_info_filename) as file: 
+                    self.patches_info = pickle.load(file) 
+                    self.list_wsi_filenames = list(set([patch['path_origin'] for patch in self.patches_info])) 
+            elif path_to_wsis is not None: 
+                self.list_wsi_filenames = glob.glob(os.path.join(path_to_wsis, '*')) 
+                self.list_wsi_filenames = [path_to_wsi for path_to_wsi in self.list_wsi_filenames if os.path.isfile(path_to_wsi)] 
+            else: 
+                raise ValueError("path_to_wsis, list_wsi_filenames and patches_info_filename cannot be all None") 
+        
+        self.result_saving_folder = result_saving_folder
         self.temporary_folder = temporary_folder
         self.dataset_name = dataset_name
         self.mpp = mpp
         self.magnification = magnification
 
-        
-
-        if not os.path.exists(self.results_saving_folder):
-            os.makedirs(self.results_saving_folder)
+        if not os.path.exists(self.result_saving_folder):
+            os.makedirs(self.result_saving_folder)
 
         if not os.path.exists(self.temporary_folder):
             os.makedirs(self.temporary_folder)
-    
 
             
     def segment(self, image):
@@ -152,22 +154,24 @@ class CellVIT_Segmentor(CellSegmentor):
                  path_to_wsis=None,                  
                  list_wsi_filenames=None,
                  patches_info_filename=None,
-                 results_saving_folder="../results",
-                 temporary_folder="../results/tmp",
-                 model_path="../CellViT/models/pretrained",
+                 result_saving_folder="results",
+                 temporary_folder="results/tmp",
+                 model_path="CellViT/models/pretrained",
                  gpu=0,
                  enforce_mixed_precision=False,
                  batch_size=8,
-                 dataset_name="dataset"
+                 dataset_name="HER2",
+                 process_by_patch=False
                  ):
         super().__init__(path_to_wsis=path_to_wsis,
                          list_wsi_filenames=list_wsi_filenames,
                          patches_info_filename=patches_info_filename,
-                         results_saving_folder=results_saving_folder,
+                         result_saving_folder=result_saving_folder,
                          temporary_folder=temporary_folder,
                          dataset_name=dataset_name,
                          mpp=mpp,
-                         magnification=magnification)
+                         magnification=magnification,
+                         process_by_patch=False)
         
         self.list_wsi_filenames = [self.check_and_convert_wsifile(path_to_wsi) for path_to_wsi in self.list_wsi_filenames]
 
@@ -182,24 +186,17 @@ class CellVIT_Segmentor(CellSegmentor):
         self.gpu = gpu
         self.enforce_mixed_precision = enforce_mixed_precision
         self.batch_size = batch_size
-
-
-    
-    
     
     def cellvit_preprocess(self):
         from CellViT.preprocessing.patch_extraction.src.cli import PreProcessingConfig
         from CellViT.preprocessing.patch_extraction.src.patch_extraction import PreProcessor
 
-
         for path_to_wsi, mpp, magnification, extension in zip(self.list_wsi_filenames, self.mpps, self.magnifications, self.extensions):
             configuration = PreProcessingConfig(wsi_paths=path_to_wsi,
-                                                output_path=os.path.join(self.results_saving_folder, 
-                                                                             "segmentation/CellViT", self.dataset_name),
+                                                output_path=os.path.join(self.result_saving_folder, "segmentation"), 
                                                 patch_size=self.patch_size,
                                                 patch_overlap=self.patch_overlap,
-                                                wsi_properties={'slide_mpp': mpp,
-                                                                'magnification': magnification},
+                                                wsi_properties={'slide_mpp': mpp, 'magnification': magnification},
                                                 wsi_extension=extension)
             
             slide_processor = PreProcessor(slide_processor_config=configuration)
@@ -231,7 +228,7 @@ class CellVIT_Segmentor(CellSegmentor):
                 name=wsi_name,
                 patient=wsi_name,
                 slide_path=wsi_path,
-                patched_slide_path=os.path.join(self.results_saving_folder, "segmentation/CellViT", self.dataset_name, wsi_name),
+                patched_slide_path=os.path.join(self.result_saving_folder, "segmentation", wsi_name),
             )
             check_wsi(wsi=wsi_file, magnification=magnification)
             cell_segmentation.process_wsi(
@@ -247,19 +244,19 @@ def cellVIT_segmentation(mpp=None,
                          path_to_wsis=None,      
                          list_wsi_filenames=None,
                          patches_info_filename=None,
-                         results_saving_folder="../results",
-                         temporary_folder="../results/tmp",
-                         model_path="../CellViT/models/pretrained",
+                         result_saving_folder="results",
+                         temporary_folder="results/tmp",
+                         model_path="CellViT/models/pretrained",
                          gpu=0,
                          enforce_mixed_precision=False,
-                         dataset_name="dataset"):
+                         dataset_name="HER2"):
     
     seg = CellVIT_Segmentor(mpp=mpp,
                             magnification=magnification,
                             path_to_wsis=path_to_wsis,
                             list_wsi_filenames=list_wsi_filenames,
                             patches_info_filename=patches_info_filename,
-                            results_saving_folder=results_saving_folder,
+                            result_saving_folder=result_saving_folder,
                             temporary_folder=temporary_folder,
                             model_path=model_path,
                             gpu=gpu,
@@ -281,12 +278,12 @@ def main_segmentation():
     parser.add_argument('--path_to_wsis', type=str, default=None, help='Path to the WSIs')
     parser.add_argument('--list_wsi_filenames', type=str, nargs='+', default=None, help='List of WSI filenames')
     parser.add_argument('--patches_info_filename', type=str, default=None, help='Patches info filename')
-    parser.add_argument('--results_saving_folder', type=str, default="../results", help='Results saving folder')
-    parser.add_argument('--temporary_folder', type=str, default="../results/tmp", help='Temporary folder')
-    parser.add_argument('--model_path', type=str, default="../CellViT/models/pretrained/", help='Model path')
+    parser.add_argument('--result_saving_folder', type=str, default="results", help='Results saving folder')
+    parser.add_argument('--temporary_folder', type=str, default="results/tmp", help='Temporary folder')
+    parser.add_argument('--model_path', type=str, default="CellViT/models/pretrained/", help='Model path')
     parser.add_argument('--gpu', type=int, default=0, help='GPU')
     parser.add_argument('--enforce_mixed_precision', type=bool, default=False, help='Enforce mixed precision')
-    parser.add_argument('--dataset_name', type=str, default="dataset", help='Dataset name')
+    parser.add_argument('--dataset_name', type=str, default="HER2", help='Dataset name')
     
     args = parser.parse_args()
     
@@ -296,7 +293,7 @@ def main_segmentation():
                             path_to_wsis=args.path_to_wsis,      
                             list_wsi_filenames=args.list_wsi_filenames,
                             patches_info_filename=args.patches_info_filename,
-                            results_saving_folder=args.results_saving_folder,
+                            result_saving_folder=args.result_saving_folder,
                             temporary_folder=args.temporary_folder,
                             model_path=args.model_path,
                             gpu=args.gpu,
@@ -309,11 +306,4 @@ def main_segmentation():
 if __name__ == "__main__":
 
     main_segmentation()
-
-
-
-
-
-
-    
 

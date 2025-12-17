@@ -175,12 +175,6 @@ class GeneEmbedding(Embedding):
         print("Add patch path to data")
         df_filenames = pd.DataFrame()
         df_filenames["path"] = self.patches_filenames
-        df_filenames["name_origin"] = df_filenames["path"].apply(lambda f: f.split("/")[-1].split("_spot")[0])
-        # In patches names that I added rep_ from origin name
-        if self.name is not None and "her2" in self.name.lower():
-            df_filenames["name_origin"] = df_filenames["name_origin"].apply(lambda o: o.split("_rep")[0] + o.split("_rep")[1])
-        print(f"Path: {df_filenames['path'].values[0].split('/')[-1]}", flush=True)
-        print(df_filenames.columns, flush=True)
         
         if df_filenames['path'].values[0].endswith('hdf5'):
             
@@ -190,13 +184,20 @@ class GeneEmbedding(Embedding):
             gene_emb.obs['path'] = df_filenames['path'].values[0]
             
         else:
-            
+            df_filenames["name_origin"] = df_filenames["path"].apply(lambda f: f.split("/")[-1].split("_spot")[0])
+            # In patches names that I added rep_ from origin name
+            if self.name is not None and "her2" in self.name.lower():
+                df_filenames["name_origin"] = df_filenames["name_origin"].apply(lambda o: o.split("_rep")[0] + o.split("_rep")[1])
+            print(f"Path: {df_filenames['path'].values[0].split('/')[-1]}", flush=True)
+            print(df_filenames.columns, flush=True)
+
             df_filenames["x"] = df_filenames["path"].apply(lambda f: int(f.split("/")[-1].split("_spot")[-1].split("x")[0]))
             
             df_filenames["y"] = df_filenames["path"].apply(
                 lambda f: int(f.split("/")[-1].split("_spot")[-1].split("x")[1].split(".")[0])
             )
             gene_emb.obs["path"] = gene_emb.obs.merge(df_filenames, how="left", on=["name_origin", "x", "y"])["path"].values
+
 
     def read_old_st_with_gzip_compression(self, index):
         """Read old ST sample (Ex: her2-positive breast cancer data).
@@ -573,8 +574,6 @@ class GeneEmbedding(Embedding):
     
     def compute_raw_embeddings(self, chunk_size=10, temp_dir="./tmp_gene_emb_chunks"):
         
-        from gtfparse import read_gtf
-
         os.makedirs(temp_dir, exist_ok=True)
         genes_present_df = None
         chunk_embs = []
@@ -628,6 +627,9 @@ class GeneEmbedding(Embedding):
         print("Replacing NaN values with 0 in embeddings matrix.")
         self.emb.var = pd.concat((self.emb.var, genes_present_df.fillna(0).astype(bool)), axis=1)
         print("Gene embeddings computed and stored in self.emb.")
+
+        # Remove  temp_dir="./tmp_gene_emb_chunks"
+        os.system(f"rm -rf {temp_dir}")
         
     def preprocessing(
         self,
