@@ -3,7 +3,7 @@
 ## Overview
 Here, we develop a pipeline to systematically evaluate the biological concepts encoded within histopathology foundation models (hFMs) using molecular data. We also perform extended pre-training of [UNI](https://github.com/mahmoodlab/UNI) to identify optimal conditions that enhance the model’s ability to encode richer, tumor tissue-specific biological concepts.
 
-<img width="4961" height="7016" alt="Figure 7" src="https://github.com/user-attachments/assets/517f1f6c-9a9a-4272-91dd-919ab01a36b5" />
+<img width="4961" height="3602" alt="GraphicalAbstract" src="https://github.com/user-attachments/assets/c0a2daad-48ec-4a87-a816-8600d09691f5" />
 
 This code was developed on a 64-bit Debian GNU/Linux system (x86_64), running kernel version 6.1.0-26-amd64 (Debian 6.1.112-1), with dynamic preemption enabled (PREEMPT_DYNAMIC). The code to perform extended pretraining is available in the [dinov2](https://github.com/AI-for-RNA-Biology/dinov2/tree/19a441962b97527abc3a8ca2da8a2938aa7c663e) folder, while the code to assess compute and evaluate the resulting embeddings is located in the [digitalhistopathology](./digitalhistopathology/) and [scripts](./scripts/) folders.
 
