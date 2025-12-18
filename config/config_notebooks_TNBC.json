@@ -13,7 +13,7 @@
         "handcrafted_features": "lightgrey"
     },
     "path_to_base_pipelines": [
-        "../../results/TNBC/pipeline/uni/",
+        "../../results/TNBC/pipeline/uni",
         "../../results/TNBC/pipeline/uni2",
         "../../results/TNBC/pipeline/virchow",
         "../../results/TNBC/pipeline/provgigapath",
@@ -41,7 +41,7 @@
     "#AA7FB4", 
     "#A94F9B"],
 
-    "path_to_retrained_pipelines_1": ["../../results/TNBC/pipeline/uni/",
+    "path_to_retrained_pipelines_1": ["../../results/TNBC/pipeline/uni",
                     "../../results/TNBC/pipeline/uni_explora_kde_4096_prototypes",
                     "../../results/TNBC/pipeline/uni_explora_kde_16384_prototypes", 
                     "../../results/TNBC/pipeline/uni_explora_kde_65536_prototypes", 
@@ -62,7 +62,7 @@
     "retrained_benchmark_folder1": "../../results/TNBC/benchmark/uni_explora_models/",
 
 
-    "path_to_retrained_pipelines_2": ["../../results/TNBC/pipeline/uni/",
+    "path_to_retrained_pipelines_2": ["../../results/TNBC/pipeline/uni",
                     "../../results/TNBC/pipeline/uni_full_kde_4096_prototypes",
                     "../../results/TNBC/pipeline/uni_full_kde_16384_prototypes", 
                     "../../results/TNBC/pipeline/uni_full_kde_65536_prototypes", 

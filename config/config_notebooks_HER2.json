@@ -14,7 +14,7 @@
         "scMTOP": "sienna"
     },
     "path_to_base_pipelines": [
-        "../../results/HER2/pipeline/uni/",
+        "../../results/HER2/pipeline/uni",
         "../../results/HER2/pipeline/uni2",
         "../../results/HER2/pipeline/virchow",
         "../../results/HER2/pipeline/provgigapath",
@@ -42,7 +42,7 @@
     "#AA7FB4", 
     "#A94F9B"],
 
-    "path_to_retrained_pipelines_1": ["../../results/HER2/pipeline/uni/",
+    "path_to_retrained_pipelines_1": ["../../results/HER2/pipeline/uni",
                     "../../results/HER2/pipeline/HER2_uni_explora_kde_4096_prototypes",
                     "../../results/HER2/pipeline/HER2_uni_explora_kde_16384_prototypes", 
                     "../../results/HER2/pipeline/HER2_uni_explora_kde_65536_prototypes", 
@@ -63,12 +63,12 @@
     "retrained_benchmark_folder1": "../../results/HER2/benchmark/uni_explora_models/",
 
 
-    "path_to_retrained_pipelines_2": ["../../results/HER2/pipeline/uni/",
+    "path_to_retrained_pipelines_2": ["../../results/HER2/pipeline/uni",
                     "../../results/HER2/pipeline/HER2_uni_full_kde_4096_prototypes",
                     "../../results/HER2/pipeline/HER2_uni_full_kde_16384_prototypes", 
                     "../../results/HER2/pipeline/HER2_uni_full_kde_65536_prototypes", 
                     "../../results/HER2/pipeline/HER2_uni_full_koleo_4096_prototypes", 
-                    "../../results/HER2/pipeline/HER2_uni_full_koleo_16384_prototypes", 
+                    "/storage/research/dbmr_luisierlab/temp/lfournier/repositories/TumorArchetype-FM/results/HER2/pipeline/HER2_uni_full_koleo_16384_prototypes", 
                     "../../results/HER2/pipeline/HER2_uni_full_koleo_65536_prototypes"],
 
     
@@ -82,7 +82,7 @@
 
     "retrained_model_list2_type": "full",
 
-    "retrained_benchmark_folder2": "../../results/HER2/benchmark/uni_full_models/",
+    "retrained_benchmark_folder2": "/storage/research/dbmr_luisierlab/temp/lfournier/repositories/TumorArchetype-FM/results/HER2/benchmark/uni_full_models/",
 
     "dataset": "HER2"
 

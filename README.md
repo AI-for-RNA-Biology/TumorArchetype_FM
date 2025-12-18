@@ -469,23 +469,31 @@ This step can take up to 8 hours on a single cpu with 32GB of memory. Therefore,
 
 ## 6 Notebooks:
 
-The notebooks analyze the results obtained in the full pipeline by doing some additional analyis or generating additional vizualisations. You can run them in their order of appearance. They will all load the needed files from a single config file. You can find it under `config/config_notebooks.json`.
+These notebooks analyze the results produced by the full pipeline through additional analyses and vizualizations. You can run them in their order of appearance. All notebooks load the required files from a config file, specific to the dataset: `config/config_notebooks_{dataset}.json`.
 
 **Description of the notebooks:**
 
+Common to both datasets:
 - `1_Unsupervised_clustering_base.ipynb`: Analyze the results of the clustering and the ARI scores for the base models.
 - `2_Regression_handcrafted_features.ipynb`: Analyze the results from linear regression, for both the base models and the retrained models. 
 - `3_Unsupervised_clustering.ipynb`: Analyze the results of the clustering and the ARI scores for the retrained models. 
-- `4_Invasive_cancer_clustering.ipynb`: Focuses on finding the best UMAP and k-means parameters for clustering invasive cancer patches to identify distinct archetypes. 
-- `5_Invasive_clusters_image_wasserstein.ipynb`: Visualizes Wasserstein distances between invasive cancer clusters in the image embedding space. 
-- `6_Invasive_clusters_molecular_wassertein.ipynb`: Visualizes Wasserstein distances between invasive cancer clusters in the molecular embedding space. 
-- `7_Invasive_clusters_images.ipynb`: Visualizes images from invasive cancer clusters. 
-- `8_Invasive_clusters_batch.ipynb`: Analyzes batch effects in invasive cancer clusters. 
-- `9_Invasive_clusters_viz.ipynb`: Creates visualizations for invasive cancer clusters, on the original WSIs. 
-- `10_Molecular_DGE_between_clusters.Rmd`: Performs differential gene expression analysis between identified molecular clusters. 
-- `11_pathway_graphs.ipynb: Generates pathway enrichment graphs for molecular clusters. Note: prior to running this notebook, you need to go on [STRINGdb](https://string-db.org/) and put the markers genes generated from notebook 10. You need then to download the `.tsv` file related to the pathway you want to analyze. In this notebook, we show examples for 4 different pathways.   
-- `12_gene_expression_viz.ipynb`: Visualizes gene expression patterns across clusters on the WSIs. 
-- `13_Supp.ipynb`: Contains supplementary analysis showing why patient A has been removed from all the analysis. 
+- `4_Shannon_entropy.ipynb`: Computes the Shannon entropy of the retrained models.
+- `5_Invasive_cancer_clustering.ipynb`: Focuses on finding the best UMAP and k-means parameters for clustering invasive cancer patches to identify distinct archetypes. 
+- `6_Invasive_clusters_image_wasserstein.ipynb`: Visualizes Wasserstein distances between invasive cancer clusters in the image embedding space. 
+- `7_Invasive_clusters_molecular_wassertein.ipynb`: Visualizes Wasserstein distances between invasive cancer clusters in the molecular embedding space. 
+- `8_Invasive_clusters_images.ipynb`: Visualizes images from invasive cancer clusters. 
+- `9_1_Overall_batch.ipynb`: Analyzes batch effects across all tissue types.
+- `9_2_Invasive_batch.ipynb`: Analyzes batch effects in invasive cancer clusters.
+
+Specific to HER2:
+- `10_Invasive_clusters_viz.ipynb`: Creates visualizations for invasive cancer clusters, on the original WSIs. 
+- `11_Gene_expression_viz.ipynb`: Visualizes gene expression patterns across clusters on the WSIs. 
+- `S1_Patient_A.ipynb`: Supplementary analysis showing why patient A was excluded from all analyses.
+- `S2_Macenko.ipynb`: Supplementary analysis showing the results obtained using Macenko stain normalization.
+
+Specific to TNBC:
+- `10_Invasive_clusters_among_patients.ipynb`: Visualizes invasive cancer clusters across patients using simplex plots.
+- `11_Clinical_cox.ipynb`: Generates plots for the Cox proportional hazards model.
 
 ## Authors
 
