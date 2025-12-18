@@ -1,7 +1,7 @@
 # Prognostic RNA-splicing archetypes in breast cancer identified by extended pre-training of histopathology foundation models
 
 ## Overview
-Here, we develop a pipeline to systematically evaluate the biological concepts encoded within histopathology foundation models (hFMs) using molecular data. We also develop an histopathology-driven, unsupervised framework for tumor archetype discovery, integrating extended pre-training of [UNI](https://github.com/mahmoodlab/UNI), spatial clustering of invasive cancer patches, molecular characterization of image-derived archetypes, and downstream association with patient survival outcomes. 
+Here, we develop a pipeline to systematically evaluate the biological concepts encoded within histopathology foundation models (hFMs). We also develop an histopathology-driven, unsupervised framework for tumor archetype discovery, integrating extended pre-training of [UNI](https://github.com/mahmoodlab/UNI), spatial clustering of invasive cancer patches, molecular characterization of image-derived archetypes, and downstream association with patient survival outcomes. 
 
 <img width="4961" height="3602" alt="GraphicalAbstract" src="https://github.com/user-attachments/assets/c0a2daad-48ec-4a87-a816-8600d09691f5" />
 
