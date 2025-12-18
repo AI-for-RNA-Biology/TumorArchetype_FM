@@ -1,4 +1,4 @@
-# Image-Based Discovery of a Recurrent Tumor Archetype Characterized by Aberrant RNA Splicing and Associated with Poor Survival in Breast Cancer
+# Prognostic RNA-splicing archetypes in breast cancer identified by extended pre-training of histopathology foundation models
 
 ## Overview
 Here, we develop a pipeline to systematically evaluate the biological concepts encoded within histopathology foundation models (hFMs) using molecular data. We also perform extended pre-training of [UNI](https://github.com/mahmoodlab/UNI) to identify optimal conditions that enhance the model’s ability to encode richer, tumor tissue-specific biological concepts.
