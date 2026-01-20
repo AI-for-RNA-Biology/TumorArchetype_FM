@@ -294,7 +294,7 @@ This step converts raw RDS count objects into a filtered, patient-aware Seurat o
 
 1. Install the required dependency, and set the library path:
     ```bash
-    pip install gtfparse=2.5.0
+    pip install gtfparse==2.5.0
     export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
     ```
 
